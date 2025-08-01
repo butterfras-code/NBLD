@@ -22,9 +22,11 @@
         .now-playing-glow {
             box-shadow: 0 0 8px #00ffff, 0 0 12px #00ffff;
         }
-        .rating-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        .rating-button {
+            transition: transform 0.1s ease-in-out;
+        }
+        .rating-button.selected {
+            transform: scale(1.25);
         }
     </style>
 </head>
@@ -66,6 +68,24 @@
         } catch (error) {
             console.error("Firebase initialization error. Please provide your Firebase config.", error);
         }
+
+        const lineDancesList = [
+            { name: 'Tush Push', song: 'Tush Push', artist: 'Trisha Yearwood' },
+            { name: 'Copperhead Road', song: 'Copperhead Road', artist: 'Steve Earle' },
+            { name: 'Watermelon Crawl', song: 'Watermelon Crawl', artist: 'Tracy Byrd' },
+            { name: 'Boot Scootin\' Boogie', song: 'Boot Scootin\' Boogie', artist: 'Brooks & Dunn' },
+        ];
+
+        const partnerDancesList = [
+            { name: 'Two Step' },
+            { name: 'Triple Two' },
+            { name: 'Cha Cha' },
+            { name: 'Polka' },
+            { name: 'Waltz' },
+            { name: 'West Coast Swing' },
+            { name: 'East Coast Swing' },
+            { name: 'Night Club Two Step' },
+        ];
 
         // --- Helper Functions for Firestore ---
         const seedInitialData = async () => {
@@ -157,8 +177,46 @@
                 </Modal>
             );
         };
+        
+        const LineDanceLessonModal = ({ show, onClose, onConfirm }) => {
+            const [selectedDance, setSelectedDance] = useState('');
+            if (!show) return null;
 
-        const RequestForm = ({ onClose, tippingInfo }) => {
+            const handleConfirm = () => {
+                if (selectedDance) {
+                    onConfirm(selectedDance);
+                }
+            };
+
+            return (
+                <Modal show={show} onClose={onClose} title="Select Dance for Lesson">
+                    <p className="text-gray-300 mb-4">Which dance will be taught?</p>
+                    <select value={selectedDance} onChange={e => setSelectedDance(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 mb-6">
+                        <option value="">-- Select a Dance --</option>
+                        {lineDancesList.map(dance => <option key={dance.name} value={dance.name}>{dance.name}</option>)}
+                    </select>
+                    <div className="flex justify-end gap-4">
+                        <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
+                        <button onClick={handleConfirm} disabled={!selectedDance} className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg disabled:opacity-50">Add Lesson</button>
+                    </div>
+                </Modal>
+            );
+        };
+
+        const TippingSection = ({ tippingInfo }) => {
+            if (!tippingInfo?.venmo && !tippingInfo?.cashapp) {
+                return null;
+            }
+            return (
+                <div className="border-t border-gray-700 pt-4 mt-8 text-center">
+                    <p className="text-lg text-cyan-300 font-semibold mb-2">Enjoying the music? Tip the DJ!</p>
+                    {tippingInfo.venmo && <a href={`https://venmo.com/${tippingInfo.venmo}`} target="_blank" rel="noopener noreferrer" className="inline-block text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 my-2 mx-2">Venmo: @{tippingInfo.venmo}</a>}
+                    {tippingInfo.cashapp && <a href={`https://cash.app/$${tippingInfo.cashapp}`} target="_blank" rel="noopener noreferrer" className="inline-block text-white bg-green-500 hover:bg-green-600 rounded-lg px-4 py-2 my-2 mx-2">Cash App: ${tippingInfo.cashapp}</a>}
+                </div>
+            );
+        };
+
+        const RequestForm = ({ onClose, tippingInfo, formType }) => {
             const [danceName, setDanceName] = useState('');
             const [songName, setSongName] = useState('');
             const [artist, setArtist] = useState('');
@@ -166,20 +224,26 @@
             const [customerName, setCustomerName] = useState('');
             const [showThanksModal, setShowThanksModal] = useState(false);
 
-            const lineDances = [
-                { name: 'Tush Push', song: 'Tush Push', artist: 'Trisha Yearwood' },
-                { name: 'Copperhead Road', song: 'Copperhead Road', artist: 'Steve Earle' },
-                { name: 'Watermelon Crawl', song: 'Watermelon Crawl', artist: 'Tracy Byrd' },
-                { name: 'Boot Scootin\' Boogie', song: 'Boot Scootin\' Boogie', artist: 'Brooks & Dunn' },
-            ];
+            const isLineDance = formType === 'line';
+            const danceList = isLineDance ? lineDancesList : partnerDancesList;
+            const quickSelectLabel = isLineDance ? "Quick Select a Line Dance" : "Quick Select a Dance Style";
 
-            const handleLineDanceSelect = (e) => {
+            const handleDanceSelect = (e) => {
                 const selectedDanceName = e.target.value;
-                const dance = lineDances.find(d => d.name === selectedDanceName);
+                const dance = danceList.find(d => d.name === selectedDanceName);
                 if (dance) {
-                    setDanceName(dance.name); setSongName(dance.song); setArtist(dance.artist);
+                    setDanceName(dance.name);
+                    if (isLineDance) {
+                        setSongName(dance.song || '');
+                        setArtist(dance.artist || '');
+                    } else {
+                        setSongName('');
+                        setArtist('');
+                    }
                 } else {
-                    setDanceName(''); setSongName(''); setArtist('');
+                    setDanceName('');
+                    setSongName('');
+                    setArtist('');
                 }
             };
 
@@ -199,13 +263,7 @@
                     <div className="text-center">
                         <h2 className="text-2xl font-bold text-pink-400 mb-4">Thank You!</h2>
                         <p className="text-gray-200 mb-4">Your request has been sent to the DJ.</p>
-                        {(tippingInfo?.venmo || tippingInfo?.cashapp) && (
-                            <div className="border-t border-gray-600 pt-4 mt-4">
-                                <p className="text-lg text-cyan-300 font-semibold mb-2">Enjoying the music? Tip the DJ!</p>
-                                {tippingInfo.venmo && <a href={`https://venmo.com/${tippingInfo.venmo}`} target="_blank" rel="noopener noreferrer" className="block text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 my-2">Venmo: @{tippingInfo.venmo}</a>}
-                                {tippingInfo.cashapp && <a href={`https://cash.app/$${tippingInfo.cashapp}`} target="_blank" rel="noopener noreferrer" className="block text-white bg-green-500 hover:bg-green-600 rounded-lg px-4 py-2 my-2">Cash App: ${tippingInfo.cashapp}</a>}
-                            </div>
-                        )}
+                        <TippingSection tippingInfo={tippingInfo} />
                         <button onClick={() => { setShowThanksModal(false); onClose(); }} className="mt-4 bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg w-full">Close</button>
                     </div>
                 );
@@ -214,10 +272,10 @@
             return (
                 <form onSubmit={handleSubmit}>
                     <div className="mb-4">
-                        <label htmlFor="line-dance-select" className="block text-cyan-300 text-sm font-bold mb-2">Quick Select a Line Dance</label>
-                        <select id="line-dance-select" onChange={handleLineDanceSelect} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
+                        <label htmlFor="dance-select" className="block text-cyan-300 text-sm font-bold mb-2">{quickSelectLabel}</label>
+                        <select id="dance-select" onChange={handleDanceSelect} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
                             <option value="">-- Select a Dance --</option>
-                            {lineDances.map(dance => <option key={dance.name} value={dance.name}>{dance.name}</option>)}
+                            {danceList.map(dance => <option key={dance.name} value={dance.name}>{dance.name}</option>)}
                         </select>
                     </div>
                     <p className="text-center text-gray-400 my-2">OR</p>
@@ -280,7 +338,7 @@
             );
         };
 
-        const QueueList = ({ queue, isDjView, onReorder, onEdit, onDelete, onMove, onMarkAsPlayed, title, isUpcomingQueue, onVote, votedSongs }) => {
+        const QueueList = ({ queue, isDjView, onReorder, onEdit, onDelete, onMove, onMarkAsPlayed, title, isUpcomingQueue, onVote, votedSongs = [] }) => {
             const dragItem = useRef(null);
             const dragOverItem = useRef(null);
 
@@ -307,6 +365,8 @@
                         const isNowPlaying = isUpcomingQueue && index === 0;
                         const totalVotes = (item.likes?.length || 0) + (item.dislikes?.length || 0);
                         const likePercentage = totalVotes > 0 ? Math.round(((item.likes?.length || 0) / totalVotes) * 100) : null;
+                        const canVote = !isDjView && item.type === 'song' && (isNowPlaying || item.played);
+                        const currentVote = votedSongs.find(v => v.id === item.id)?.vote;
 
                         const itemContent = (
                             <div 
@@ -327,10 +387,10 @@
                                     <p className={`text-sm ${item.type === 'event' ? 'text-pink-200' : 'text-gray-300'}`}>{item.songName}</p>
                                     <p className="text-xs text-gray-400">{item.artist}</p>
                                 </div>
-                                {!isDjView && item.type === 'song' && (
+                                {canVote && (
                                     <div className="flex gap-2">
-                                        <button onClick={() => onVote(item.id, 'like')} disabled={votedSongs.includes(item.id)} className="rating-button text-green-400 hover:text-green-300 disabled:text-green-600">👍</button>
-                                        <button onClick={() => onVote(item.id, 'dislike')} disabled={votedSongs.includes(item.id)} className="rating-button text-red-400 hover:text-red-300 disabled:text-red-600">👎</button>
+                                        <button onClick={() => onVote(item.id, 'like')} className={`rating-button text-2xl ${currentVote === 'like' ? 'selected' : ''}`}>👍</button>
+                                        <button onClick={() => onVote(item.id, 'dislike')} className={`rating-button text-2xl ${currentVote === 'dislike' ? 'selected' : ''}`}>👎</button>
                                     </div>
                                 )}
                                 {isDjView && (
@@ -405,8 +465,10 @@
             const [queue, setQueue] = useState([]);
             const [requests, setRequests] = useState([]);
             const [tippingInfo, setTippingInfo] = useState({ venmo: '', cashapp: '' });
-            const [showRequestModal, setShowRequestModal] = useState(false);
+            const [showLineRequestModal, setShowLineRequestModal] = useState(false);
+            const [showPartnerRequestModal, setShowPartnerRequestModal] = useState(false);
             const [showLoginModal, setShowLoginModal] = useState(false);
+            const [showLineDanceLessonModal, setShowLineDanceLessonModal] = useState(false);
             const [editingItem, setEditingItem] = useState(null);
             const [venmoUser, setVenmoUser] = useState('');
             const [cashappUser, setCashappUser] = useState('');
@@ -467,19 +529,22 @@
             const handleAddRequestToQueue = async (request, position) => {
                 if (!db) return;
                 const upcomingQueue = queue.filter(q => !q.played);
-                const order = position === 'next' ? -1 : upcomingQueue.length;
-                
                 const batch = db.batch();
 
                 if (position === 'next') {
+                    const newOrderIndex = 1; // Position #2
                     upcomingQueue.forEach(item => {
-                        const docRef = db.collection('queue').doc(item.id);
-                        batch.update(docRef, { order: item.order + 1 });
+                        if (item.order >= newOrderIndex) {
+                            batch.update(db.collection('queue').doc(item.id), { order: item.order + 1 });
+                        }
                     });
+                    const newDocRef = db.collection('queue').doc();
+                    batch.set(newDocRef, { type: 'song', danceName: request.danceName, songName: request.songName, artist: request.artist, order: newOrderIndex, played: false, likes: [], dislikes: [] });
+                } else { // 'last'
+                    const newOrderIndex = upcomingQueue.length;
+                    const newDocRef = db.collection('queue').doc();
+                    batch.set(newDocRef, { type: 'song', danceName: request.danceName, songName: request.songName, artist: request.artist, order: newOrderIndex, played: false, likes: [], dislikes: [] });
                 }
-
-                const newDocRef = db.collection('queue').doc();
-                batch.set(newDocRef, { type: 'song', danceName: request.danceName, songName: request.songName, artist: request.artist, order: order, played: false, likes: [], dislikes: [] });
                 
                 batch.delete(db.collection('requests').doc(request.id));
                 await batch.commit();
@@ -487,18 +552,25 @@
 
             const handleDeleteRequest = async (id) => { if (!db) return; await db.collection('requests').doc(id).delete(); };
 
-            const handleAddEventToQueue = (eventName) => {
+            const handleAddEventToQueue = (eventName, notes = '') => {
                 setPromptState({
                     show: true,
                     title: `Add Event: ${eventName}`,
                     message: 'Enter any optional notes for this event.',
-                    onConfirm: async (note) => {
+                    onConfirm: async (noteInput) => {
                         if (!db) return;
                         const upcomingQueue = queue.filter(q => !q.played);
-                        await db.collection('queue').add({ type: 'event', danceName: eventName, songName: note || '', artist: '', order: upcomingQueue.length, played: false, likes: [], dislikes: [] });
+                        await db.collection('queue').add({ type: 'event', danceName: eventName, songName: notes || noteInput, artist: '', order: upcomingQueue.length, played: false, likes: [], dislikes: [] });
                         setPromptState({ show: false, title: '', message: '', onConfirm: () => {} });
                     }
                 });
+            };
+
+            const handleAddLineDanceLesson = async (danceName) => {
+                if (!db) return;
+                const upcomingQueue = queue.filter(q => !q.played);
+                await db.collection('queue').add({ type: 'event', danceName: 'Line Dance Lesson', songName: `Teaching: ${danceName}`, artist: '', order: upcomingQueue.length, played: false, likes: [], dislikes: [] });
+                setShowLineDanceLessonModal(false);
             };
 
             const handleSaveTippingInfo = async (e) => {
@@ -565,16 +637,36 @@
             };
 
             const handleVote = async (songId, voteType) => {
-                if (!db || votedSongs.includes(songId)) return;
-
+                if (!db) return;
                 const songRef = db.collection('queue').doc(songId);
-                const fieldToUpdate = voteType === 'like' ? 'likes' : 'dislikes';
-                
-                await songRef.update({
-                    [fieldToUpdate]: firebase.firestore.FieldValue.arrayUnion(userId)
-                });
+                const existingVote = votedSongs.find(v => v.id === songId);
+                const batch = db.batch();
+                let newVotedSongs = [...votedSongs];
 
-                setVotedSongs([...votedSongs, songId]);
+                if (existingVote) {
+                    const oldVoteType = existingVote.vote;
+                    const oldField = oldVoteType === 'like' ? 'likes' : 'dislikes';
+                    batch.update(songRef, { [oldField]: firebase.firestore.FieldValue.arrayRemove(userId) });
+                    newVotedSongs = newVotedSongs.filter(v => v.id !== songId);
+
+                    if (voteType !== oldVoteType) {
+                        const newField = voteType === 'like' ? 'likes' : 'dislikes';
+                        batch.update(songRef, { [newField]: firebase.firestore.FieldValue.arrayUnion(userId) });
+                        newVotedSongs.push({ id: songId, vote: voteType });
+                    }
+                } else {
+                    const newField = voteType === 'like' ? 'likes' : 'dislikes';
+                    batch.update(songRef, { [newField]: firebase.firestore.FieldValue.arrayUnion(userId) });
+                    newVotedSongs.push({ id: songId, vote: voteType });
+                }
+
+                await batch.commit();
+                setVotedSongs(newVotedSongs);
+            };
+
+            const handleLoginSuccess = () => {
+                setIsDjLoggedIn(true);
+                setShowLoginModal(false);
             };
 
             const upcomingQueue = queue.filter(item => !item.played);
@@ -582,7 +674,8 @@
             const filteredRequests = requests.filter(req => 
                 req.songName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 req.artist.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                req.danceName.toLowerCase().includes(searchTerm.toLowerCase())
+                req.danceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                req.customerName.toLowerCase().includes(searchTerm.toLowerCase())
             );
 
             if (!db) {
@@ -600,6 +693,7 @@
                         {editingItem && <EditQueueItemModal item={editingItem} onSave={handleSaveEditedItem} onClose={() => setEditingItem(null)} />}
                         <ConfirmModal {...confirmState} onClose={() => setConfirmState({ ...confirmState, show: false })} />
                         <PromptModal {...promptState} onClose={() => setPromptState({ ...promptState, show: false })} />
+                        <LineDanceLessonModal show={showLineDanceLessonModal} onClose={() => setShowLineDanceLessonModal(false)} onConfirm={handleAddLineDanceLesson} />
 
                         <header className="flex justify-between items-center mb-6 pb-4 border-b-2 border-cyan-400">
                             <h1 className="text-3xl md:text-4xl font-bold text-cyan-400">DJ Console</h1>
@@ -610,7 +704,8 @@
                                 <div>
                                     <h3 className="text-2xl font-semibold text-pink-400 mb-3">Common Events</h3>
                                     <div className="grid grid-cols-2 gap-3">
-                                        {['Line Dance Lesson', 'Couples Dance', 'Last Call', 'Closing Time'].map(event => (
+                                        <button onClick={() => setShowLineDanceLessonModal(true)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold p-3 rounded-lg text-center">Line Dance Lesson</button>
+                                        {['Line Dance', 'Country Partner', 'West Coast', 'Couples Dance', 'Last Call', 'Closing Time'].map(event => (
                                             <button key={event} onClick={() => handleAddEventToQueue(event)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold p-3 rounded-lg text-center">{event}</button>
                                         ))}
                                     </div>
@@ -619,7 +714,7 @@
                                     <h3 className="text-2xl font-semibold text-pink-400 mb-3">Submitted Requests ({filteredRequests.length})</h3>
                                     <input 
                                         type="text"
-                                        placeholder="Search requests..."
+                                        placeholder="Search by song, artist, dance, or name..."
                                         value={searchTerm}
                                         onChange={e => setSearchTerm(e.target.value)}
                                         className="w-full p-2 mb-3 bg-gray-700 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400"
@@ -673,11 +768,14 @@
 
             return (
                 <div className="container mx-auto p-4 md:p-8">
-                    <Modal show={showRequestModal} onClose={() => setShowRequestModal(false)} title="Submit a Song Request">
-                        <RequestForm onClose={() => setShowRequestModal(false)} tippingInfo={tippingInfo} />
+                    <Modal show={showLineRequestModal} onClose={() => setShowLineRequestModal(false)} title="Request a Line Dance">
+                        <RequestForm onClose={() => setShowLineRequestModal(false)} tippingInfo={tippingInfo} formType="line" />
+                    </Modal>
+                    <Modal show={showPartnerRequestModal} onClose={() => setShowPartnerRequestModal(false)} title="Request a Partner Dance">
+                        <RequestForm onClose={() => setShowPartnerRequestModal(false)} tippingInfo={tippingInfo} formType="partner" />
                     </Modal>
                     <Modal show={showLoginModal} onClose={() => setShowLoginModal(false)} title="DJ Login">
-                        <DJLogin onLogin={() => { setIsDjLoggedIn(true); setShowLoginModal(false); }} />
+                        <DJLogin onLogin={handleLoginSuccess} />
                     </Modal>
                     <header className="text-center mb-8">
                         <h1 className="text-7xl md:text-8xl font-neon" style={{ color: '#ff00ff' }}>
@@ -688,8 +786,11 @@
                             <a href="https://www.neonbootsclub.com/" target="_blank" rel="noopener noreferrer" className="bg-transparent border-2 border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-gray-900 font-bold py-2 px-6 rounded-lg transition-colors">
                                 Visit Website
                             </a>
-                            <button onClick={() => setShowRequestModal(true)} className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-6 rounded-lg transition-colors">
-                                Submit a Request
+                            <button onClick={() => setShowLineRequestModal(true)} className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-6 rounded-lg transition-colors">
+                                Request Line Dance
+                            </button>
+                            <button onClick={() => setShowPartnerRequestModal(true)} className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-6 rounded-lg transition-colors">
+                                Request Partner Dance
                             </button>
                         </div>
                     </header>
@@ -705,6 +806,7 @@
                                 <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
                                     <QueueList queue={recentlyPlayedQueue} isDjView={false} title="Recently Played" onVote={handleVote} votedSongs={votedSongs} />
                                 </div>
+                                <TippingSection tippingInfo={tippingInfo} />
                             </div>
                         )}
                     </main>
