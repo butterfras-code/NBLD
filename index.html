@@ -11,6 +11,12 @@
     <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Firebase SDKs (v8 for compatibility with single-file setup) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
     <style>
         body { 
             font-family: 'Inter', sans-serif; 
@@ -72,12 +78,11 @@
         // --- Sample Data Population ---
         const populateSampleData = async (db, collections) => {
             try {
-                const { getDoc, writeBatch, doc } = window.firebase.firestore;
-                const flagDoc = await getDoc(collections.sampleDataFlag);
-                if (flagDoc.exists()) return;
+                const flagDoc = await collections.sampleDataFlag.get();
+                if (flagDoc.exists) return;
 
                 console.log("Populating sample data for the first time...");
-                const batch = writeBatch(db);
+                const batch = db.batch();
 
                 const sampleRequests = [
                     { dance: 'Two Step', song: 'Neon Moon', artist: 'Brooks & Dunn', customerName: 'Alice', status: 'pending', createdAt: new Date(), spotify: '' },
@@ -92,12 +97,12 @@
                 ];
 
                 sampleRequests.forEach(req => {
-                    const docRef = doc(collections.requests);
+                    const docRef = collections.requests.doc();
                     batch.set(docRef, req);
                 });
 
                 sampleQueue.forEach(item => {
-                    const docRef = doc(collections.queue);
+                    const docRef = collections.queue.doc();
                     batch.set(docRef, item);
                 });
 
@@ -175,8 +180,7 @@
                 if (!dance || !song || !artist || !name) return;
                 setIsSubmitting(true);
                 try {
-                    const { addDoc } = window.firebase.firestore;
-                    await addDoc(firebase.collections.requests, { dance, song, artist, spotify, customerName: name, status: 'pending', createdAt: new Date() });
+                    await firebase.collections.requests.add({ dance, song, artist, spotify, customerName: name, status: 'pending', createdAt: new Date() });
                     setDance(''); setSong(''); setArtist(''); setSpotify(''); setName('');
                     onSubmitted();
                 } catch (error) {
@@ -325,28 +329,28 @@
             
             const dragItem = useRef(null);
             const dragOverItem = useRef(null);
-            const { query, orderBy, onSnapshot, getDoc, setDoc, addDoc, updateDoc, doc, deleteDoc, writeBatch } = window.firebase.firestore;
-
 
             useEffect(() => {
-                const qRequests = query(firebase.collections.requests, orderBy("createdAt", "desc"));
-                const unsubscribeRequests = onSnapshot(qRequests, (snapshot) => {
-                    const newRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(r => r.status === 'pending');
-                    setRequests(newRequests);
-                }, (error) => console.error("Requests snapshot error:", error));
+                const unsubscribeRequests = firebase.collections.requests
+                    .orderBy("createdAt", "desc")
+                    .onSnapshot(snapshot => {
+                        const newRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(r => r.status === 'pending');
+                        setRequests(newRequests);
+                    }, (error) => console.error("Requests snapshot error:", error));
 
-                const qQueue = query(firebase.collections.queue, orderBy("order"));
-                const unsubscribeQueue = onSnapshot(qQueue, (snapshot) => {
-                    const newQueue = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setQueue(newQueue);
-                }, (error) => console.error("Queue snapshot error:", error));
+                const unsubscribeQueue = firebase.collections.queue
+                    .orderBy("order")
+                    .onSnapshot(snapshot => {
+                        const newQueue = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setQueue(newQueue);
+                    }, (error) => console.error("Queue snapshot error:", error));
                 
                 const fetchSettings = async () => {
                     setIsLoading(true);
                     try {
                         const docRef = firebase.docs.settings(djName.toLowerCase());
-                        const docSnap = await getDoc(docRef);
-                        if (docSnap.exists()) {
+                        const docSnap = await docRef.get();
+                        if (docSnap.exists) {
                             setVenmo(docSnap.data().venmoUsername || '');
                             setCashapp(docSnap.data().cashappUsername || '');
                         }
@@ -363,7 +367,7 @@
 
             const handleSaveSettings = async () => {
                 try {
-                    await setDoc(firebase.docs.settings(djName.toLowerCase()), { venmoUsername: venmo, cashappUsername: cashapp }, { merge: true });
+                    await firebase.docs.settings(djName.toLowerCase()).set({ venmoUsername: venmo, cashappUsername: cashapp }, { merge: true });
                     setShowTipSaveSuccess(true);
                     setTimeout(() => setShowTipSaveSuccess(false), 3000);
                 } catch (error) {
@@ -383,9 +387,9 @@
                 
                 try {
                     const { id, ...data } = itemData;
-                    await addDoc(firebase.collections.queue, { ...data, status: 'queued', queuedAt: new Date(), order: newOrder });
+                    await firebase.collections.queue.add({ ...data, status: 'queued', queuedAt: new Date(), order: newOrder });
                     if (!itemData.isEvent) {
-                        await updateDoc(doc(firebase.db, `artifacts/${firebase.appId}/public/data/requests`, id), { status: 'queued' });
+                        await firebase.collections.requests.doc(id).update({ status: 'queued' });
                     }
                 } catch (error) {
                     console.error("Error adding to queue:", error);
@@ -405,7 +409,7 @@
 
             const handleDeleteRequest = async (id) => {
                 try {
-                    await deleteDoc(doc(firebase.db, `artifacts/${firebase.appId}/public/data/requests`, id));
+                    await firebase.collections.requests.doc(id).delete();
                 } catch (error) {
                     console.error("Error deleting request:", error);
                 }
@@ -413,7 +417,7 @@
 
             const handleUpdateSong = async (id, data) => {
                 try {
-                    await updateDoc(doc(firebase.db, `artifacts/${firebase.appId}/public/data/queue`, id), data);
+                    await firebase.collections.queue.doc(id).update(data);
                 } catch (error) {
                     console.error("Error updating song:", error);
                 }
@@ -421,7 +425,7 @@
 
             const handleDeleteFromQueue = async (id) => {
                 try {
-                    await deleteDoc(doc(firebase.db, `artifacts/${firebase.appId}/public/data/queue`, id));
+                    await firebase.collections.queue.doc(id).delete();
                 } catch (error) {
                     console.error("Error deleting from queue:", error);
                 }
@@ -433,9 +437,9 @@
                 if (otherItemIndex < 0 || otherItemIndex >= queue.length) return;
                 const otherItem = queue[otherItemIndex];
 
-                const batch = writeBatch(firebase.db);
-                const itemRef = doc(firebase.collections.queue, item.id);
-                const otherItemRef = doc(firebase.collections.queue, otherItem.id);
+                const batch = firebase.db.batch();
+                const itemRef = firebase.collections.queue.doc(item.id);
+                const otherItemRef = firebase.collections.queue.doc(otherItem.id);
                 
                 batch.update(itemRef, { order: otherItem.order });
                 batch.update(otherItemRef, { order: item.order });
@@ -453,9 +457,9 @@
                 newQueue.splice(dragItem.current, 1);
                 newQueue.splice(dragOverItem.current, 0, draggedItem);
                 
-                const batch = writeBatch(firebase.db);
+                const batch = firebase.db.batch();
                 newQueue.forEach((item, index) => {
-                    const itemRef = doc(firebase.collections.queue, item.id);
+                    const itemRef = firebase.collections.queue.doc(item.id);
                     batch.update(itemRef, { order: index });
                 });
                 await batch.commit();
@@ -570,15 +574,7 @@
             const [isAuthReady, setIsAuthReady] = useState(false);
 
             useEffect(() => {
-                if (!window.firebase || !window.firebase.app) {
-                    // Firebase not loaded yet, wait.
-                    return;
-                }
                 try {
-                    const { initializeApp } = window.firebase.app;
-                    const { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } = window.firebase.auth;
-                    const { getFirestore, collection, doc, orderBy, query, onSnapshot, getDoc } = window.firebase.firestore;
-
                     const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : {};
                     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-dj-app';
 
@@ -586,25 +582,27 @@
                         throw new Error("Firebase config is missing or empty.");
                     }
                     
-                    const app = initializeApp(firebaseConfig);
-                    const auth = getAuth(app);
-                    const db = getFirestore(app);
+                    if (!window.firebase.apps.length) {
+                        window.firebase.initializeApp(firebaseConfig);
+                    }
+                    
+                    const auth = window.firebase.auth();
+                    const db = window.firebase.firestore();
                     
                     const publicPath = (collectionName) => `artifacts/${appId}/public/data/${collectionName}`;
 
                     const firebaseServices = {
-                        app,
                         auth,
                         db,
                         appId,
                         collections: {
-                            requests: collection(db, publicPath('requests')),
-                            queue: collection(db, publicPath('queue')),
-                            settings: collection(db, publicPath('dj_settings')),
-                            sampleDataFlag: doc(db, publicPath('sample_data_flag'), 'populated')
+                            requests: db.collection(publicPath('requests')),
+                            queue: db.collection(publicPath('queue')),
+                            settings: db.collection(publicPath('dj_settings')),
+                            sampleDataFlag: db.collection(publicPath('sample_data_flag')).doc('populated')
                         },
                         docs: {
-                            settings: (djName) => doc(db, publicPath('dj_settings'), djName),
+                            settings: (djName) => db.collection(publicPath('dj_settings')).doc(djName),
                         }
                     };
                     setFirebase(firebaseServices);
@@ -612,23 +610,22 @@
                     const signInUser = async () => {
                         try {
                             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                await signInWithCustomToken(auth, __initial_auth_token);
+                                await auth.signInWithCustomToken(__initial_auth_token);
                             } else {
-                                await signInAnonymously(auth);
+                                await auth.signInAnonymously();
                             }
                         } catch (error) {
                             console.error("Firebase sign-in failed:", error);
                         }
                     };
 
-                    const unsubscribe = onAuthStateChanged(auth, (user) => {
+                    const unsubscribe = auth.onAuthStateChanged((user) => {
                         if (user) {
                             setIsAuthReady(true);
                         }
                     });
                     
                     signInUser();
-                    // No direct return for unsubscribe here, handled in a separate effect
                 } catch (e) {
                     console.error("FATAL: Firebase initialization failed.", e);
                     setFirebase({ error: e });
@@ -638,19 +635,18 @@
             useEffect(() => {
                 if (!isAuthReady || !firebase || firebase.error) return;
 
-                const { query, orderBy, onSnapshot, getDoc } = window.firebase.firestore;
-
                 populateSampleData(firebase.db, firebase.collections);
 
-                const qQueue = query(firebase.collections.queue, orderBy("order"));
-                const unsubscribeQueue = onSnapshot(qQueue, (snapshot) => {
-                    setQueue(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                }, (error) => console.error("Queue snapshot listener error:", error));
+                const unsubscribeQueue = firebase.collections.queue
+                    .orderBy("order")
+                    .onSnapshot(snapshot => {
+                        setQueue(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    }, (error) => console.error("Queue snapshot listener error:", error));
                 
                 const fetchAllSettings = async () => {
                     try {
-                        const angieSnap = await getDoc(firebase.docs.settings('angie'));
-                        const justinSnap = await getDoc(firebase.docs.settings('justin'));
+                        const angieSnap = await firebase.docs.settings('angie').get();
+                        const justinSnap = await firebase.docs.settings('justin').get();
                         const angieSettings = angieSnap.data();
                         const justinSettings = justinSnap.data();
                         setDjSettings({
@@ -663,7 +659,7 @@
                 };
                 
                 fetchAllSettings();
-                const settingsListener = onSnapshot(firebase.collections.settings, () => {
+                const settingsListener = firebase.collections.settings.onSnapshot(() => {
                     fetchAllSettings();
                 }, (error) => console.error("Settings snapshot listener error:", error));
 
@@ -727,30 +723,7 @@
             );
         }
 
-        // --- Load Firebase SDKs ---
-        const loadScript = (src) => {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = src;
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        };
-
-        loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js")
-            .then(() => loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"))
-            .then(() => loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"))
-            .then(() => {
-                ReactDOM.render(<App />, document.getElementById('root'));
-            })
-            .catch(err => {
-                console.error("Failed to load Firebase scripts", err);
-                const root = document.getElementById('root');
-                if (root) {
-                    root.innerHTML = '<div style="color: red; text-align: center; padding-top: 50px;">Failed to load critical app resources. Please check the console.</div>';
-                }
-            });
+        ReactDOM.render(<App />, document.getElementById('root'));
 
     </script>
 </body>
