@@ -1,752 +1,698 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon Boots DJ Request App</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, setDoc, getDoc, writeBatch, orderBy } from 'firebase/firestore';
+
+// --- Helper Components & Data ---
+
+function Icon({ path, className = "w-6 h-6" }) {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+            <path d={path} />
+        </svg>
+    );
+}
+
+const MusicNoteIcon = () => <Icon path="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />;
+const QueueIcon = () => <Icon path="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />;
+const LinkIcon = () => <Icon path="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z" />;
+const DjIcon = () => <Icon path="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />;
+const CloseIcon = () => <Icon path="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />;
+const VenmoIcon = () => <Icon className="w-8 h-8" path="M16.35,6.62c-0.28-0.59-0.7-1.12-1.23-1.55c-1.25-1-3.1-1.5-5.12-1.5c-2.63,0-4.97,0.88-6.67,2.71 c-1.29,1.39-2.03,3.2-2.03,5.19c0,2.4,0.99,4.3,2.83,5.43c1.78,1.09,4.1,1.5,6.87,1.5c1.14,0,2.23-0.1,3.25-0.3 c-0.12,0.6-0.3,1.15-0.54,1.66c-0.2,0.41-0.43,0.8-0.7,1.15c-0.3,0.38-0.63,0.72-1,1c-0.1,0.08-0.2,0.15-0.29,0.21 c-0.01,0.01-0.02,0.01-0.02,0.02c-0.4,0.29-0.85,0.51-1.34,0.65c-1.35,0.4-2.88,0.56-4.49,0.56c-4.91,0-8.88-2.4-10.42-7.25 C0.1,14.2-0.24,11.3,0.29,8.49c0.51-2.7,2.11-4.9,4.53-6.32C6.83,0.93,9.26,0.29,11.99,0.29c2.25,0,4.25,0.49,5.88,1.47 c1.3,0.79,2.28,1.98,2.83,3.48c0.16,0.42,0.28,0.85,0.38,1.29L16.35,6.62z" />;
+const CashAppIcon = () => <Icon className="w-8 h-8" path="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.5 15.5h-2v-2.5h2V15zm0-4.5h-2v-1h2v1zm0-2.5h-2v-1h2v1zm4 7H12v-1.5h2.5V15zm0-2.5H12v-1h2.5v1zm0-2.5H12v-1h2.5v1zm0-2.5H12v-1h2.5v1z" />;
+const DragHandleIcon = () => <Icon className="w-5 h-5 cursor-grab" path="M20 9H4v2h16V9zM4 15h16v-2H4v2z" />;
+const EditIcon = () => <Icon className="w-5 h-5" path="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />;
+const DeleteIcon = () => <Icon className="w-5 h-5" path="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />;
+const UpArrowIcon = () => <Icon className="w-5 h-5" path="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />;
+const DownArrowIcon = () => <Icon className="w-5 h-5" path="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />;
+const CheckIcon = () => <Icon className="w-5 h-5 text-green-400" path="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />;
+
+const NEON_BOOTS_DANCES = [
+    { dance: 'Tush Push', song: 'Any Man of Mine', artist: 'Shania Twain' },
+    { dance: 'Good Time', song: 'Good Time', artist: 'Alan Jackson' },
+    { dance: 'Electric Slide', song: 'Electric Boogie', artist: 'Marcia Griffiths' },
+    { dance: 'Copperhead Road', song: 'Copperhead Road', artist: 'Steve Earle' },
+    { dance: 'Watermelon Crawl', song: 'Watermelon Crawl', artist: 'Tracy Byrd' },
+    { dance: 'Boot Scootin\' Boogie', song: 'Boot Scootin\' Boogie', artist: 'Brooks & Dunn' },
+];
+
+const COMMON_EVENTS = [
+    'First Line Dance Lesson', 
+    'Second Line Dance Lesson', 
+    'Partner Dance Break', 
+    'Last Call', 
+    'Closing Time'
+];
+
+// --- Sample Data Population ---
+const populateSampleData = async (db, collections) => {
+    try {
+        const flagDoc = await getDoc(collections.sampleDataFlag);
+        if (flagDoc.exists()) return;
+
+        console.log("Populating sample data for the first time...");
+        const batch = writeBatch(db);
+
+        const sampleRequests = [
+            { dance: 'Two Step', song: 'Neon Moon', artist: 'Brooks & Dunn', customerName: 'Alice', status: 'pending', createdAt: new Date(), spotify: '' },
+            { dance: 'Waltz', song: 'Tennessee Whiskey', artist: 'Chris Stapleton', customerName: 'Bob', status: 'pending', createdAt: new Date(), spotify: '' },
+            { dance: 'Line Dance', song: 'Good Time', artist: 'Alan Jackson', customerName: 'Charlie', status: 'pending', createdAt: new Date(), spotify: '' },
+        ];
+
+        const sampleQueue = [
+            { dance: 'West Coast Swing', song: 'Gives Me Shivers', artist: 'Ed Sheeran', customerName: 'DJ', status: 'queued', order: 0, queuedAt: new Date(), isEvent: false, spotify: '' },
+            { dance: 'Partner Dance Break', song: 'Couples Skate!', artist: 'Event', isEvent: true, order: 1, queuedAt: new Date() },
+            { dance: 'Country Swing', song: 'Wagon Wheel', artist: 'Darius Rucker', customerName: 'DJ', status: 'queued', order: 2, queuedAt: new Date(), isEvent: false, spotify: '' },
+        ];
+
+        sampleRequests.forEach(req => {
+            const docRef = doc(collections.requests);
+            batch.set(docRef, req);
+        });
+
+        sampleQueue.forEach(item => {
+            const docRef = doc(collections.queue);
+            batch.set(docRef, item);
+        });
+
+        batch.set(collections.sampleDataFlag, { populated: true });
+
+        await batch.commit();
+        console.log("Sample data populated.");
+    } catch (error) {
+        console.error("Error populating sample data:", error);
+    }
+};
+
+// --- App Components ---
+
+function DJLogin({ onLogin }) {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+
+    const handleLogin = (e) => {
+        e.preventDefault();
+        if ((username.toLowerCase() === 'angie' || username.toLowerCase() === 'justin') && password === 'puppies') {
+            onLogin(username);
+            setError('');
+        } else {
+            setError('Invalid username or password.');
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 border border-red-500 rounded-lg p-8 shadow-2xl shadow-red-500/20 w-full max-w-sm">
+                <h2 className="text-3xl font-bold text-white text-center mb-6">DJ Login</h2>
+                <form onSubmit={handleLogin}>
+                    <div className="mb-4">
+                        <label className="block text-red-400 text-sm font-bold mb-2" htmlFor="username">DJ Name</label>
+                        <input id="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="Angie or Justin"/>
+                    </div>
+                    <div className="mb-6">
+                        <label className="block text-red-400 text-sm font-bold mb-2" htmlFor="password">Password</label>
+                        <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="••••••••"/>
+                    </div>
+                    {error && <p className="text-yellow-400 text-center text-sm mb-4">{error}</p>}
+                    <button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300">Login</button>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+function SongRequestForm({ onSubmitted, firebase }) {
+    const [dance, setDance] = useState('');
+    const [song, setSong] = useState('');
+    const [artist, setArtist] = useState('');
+    const [spotify, setSpotify] = useState('');
+    const [name, setName] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleDanceSelect = (e) => {
+        const selectedDanceName = e.target.value;
+        if (selectedDanceName === "") {
+            setDance(''); setSong(''); setArtist('');
+            return;
+        }
+        const selectedDance = NEON_BOOTS_DANCES.find(d => d.dance === selectedDanceName);
+        if (selectedDance) {
+            setDance(selectedDance.dance);
+            setSong(selectedDance.song);
+            setArtist(selectedDance.artist);
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!dance || !song || !artist || !name) return;
+        setIsSubmitting(true);
+        try {
+            await addDoc(firebase.collections.requests, { dance, song, artist, spotify, customerName: name, status: 'pending', createdAt: new Date() });
+            setDance(''); setSong(''); setArtist(''); setSpotify(''); setName('');
+            onSubmitted();
+        } catch (error) {
+            console.error("Error submitting request:", error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="bg-gray-800 border border-blue-500 rounded-lg p-6 md:p-8 shadow-2xl shadow-blue-500/20">
+            <h2 className="text-3xl font-bold text-white text-center mb-6">Submit a Song Request</h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <select onChange={handleDanceSelect} defaultValue="" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">-- Select a Taught Line Dance (Optional) --</option>
+                    {NEON_BOOTS_DANCES.map(d => <option key={d.dance} value={d.dance}>{d.dance}</option>)}
+                </select>
+                <input type="text" value={dance} onChange={e => setDance(e.target.value)} placeholder="Dance Name/Style (e.g., Two Step)" required className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="text" value={song} onChange={e => setSong(e.target.value)} placeholder="Song Name (e.g., Gives Me Shivers)" required className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="text" value={artist} onChange={e => setArtist(e.target.value)} placeholder="Artist" required className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="url" value={spotify} onChange={e => setSpotify(e.target.value)} placeholder="Spotify Link (Optional)" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your Name" required className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300 disabled:bg-blue-800 disabled:cursor-not-allowed">
+                    {isSubmitting ? 'Submitting...' : 'Submit Request'}
+                </button>
+            </form>
+        </div>
+    );
+}
+
+function Modal({ title, children, onClose }) {
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 border border-orange-500 rounded-lg p-6 shadow-2xl shadow-orange-500/20 w-full max-w-lg text-center relative">
+                <button onClick={onClose} className="absolute top-2 right-2 text-gray-400 hover:text-white"><CloseIcon /></button>
+                <h2 className="text-2xl font-bold text-white mb-4">{title}</h2>
+                <div className="text-gray-300">{children}</div>
+            </div>
+        </div>
+    );
+}
+
+function EditSongModal({ song, onClose, onSave }) {
+    const [dance, setDance] = useState(song.dance);
+    const [songName, setSongName] = useState(song.song);
+    const [artist, setArtist] = useState(song.artist);
+
+    const handleSave = () => {
+        onSave(song.id, { dance, song: songName, artist });
+        onClose();
+    };
+
+    return (
+        <Modal title="Edit Song" onClose={onClose}>
+            <div className="space-y-4 text-left">
+                <input type="text" value={dance} onChange={e => setDance(e.target.value)} placeholder="Dance Name/Style" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                <input type="text" value={songName} onChange={e => setSongName(e.target.value)} placeholder="Song Name" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                <input type="text" value={artist} onChange={e => setArtist(e.target.value)} placeholder="Artist" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+            </div>
+            <button onClick={handleSave} className="mt-6 w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Save Changes</button>
+        </Modal>
+    );
+}
+
+function EventNotesModal({ eventName, onClose, onSave }) {
+    const [notes, setNotes] = useState('');
+
+    const handleSave = () => {
+        onSave(eventName, notes);
+        onClose();
+    };
+
+    return (
+        <Modal title={eventName} onClose={onClose}>
+            <div className="space-y-4 text-left">
+                <label className="block text-orange-400 text-sm font-bold mb-2" htmlFor="event-notes">Optional Notes</label>
+                <input id="event-notes" type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g., Name of the dance being taught" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+            </div>
+            <button onClick={handleSave} className="mt-6 w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Add to Queue</button>
+        </Modal>
+    );
+}
+
+
+function TipJar({ djSettings }) {
+    const venmoLink = djSettings.venmo ? `https://venmo.com/u/${djSettings.venmo}` : null;
+    const cashAppLink = djSettings.cashapp ? `https://cash.app/$${djSettings.cashapp}` : null;
+    if (!venmoLink && !cashAppLink) return null;
+
+    return (
+        <div className="mt-6 text-center">
+            <h3 className="text-xl font-bold text-orange-400 mb-4">Enjoying the music? Tip the DJ!</h3>
+            <div className="flex justify-center items-center space-x-6">
+                {venmoLink && <a href={venmoLink} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-blue-400 hover:text-blue-300 transition-colors"><VenmoIcon /><span className="mt-1 text-sm font-semibold">Venmo</span></a>}
+                {cashAppLink && <a href={cashAppLink} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-green-400 hover:text-green-300 transition-colors"><CashAppIcon /><span className="mt-1 text-sm font-semibold">Cash App</span></a>}
+            </div>
+        </div>
+    );
+}
+
+function DanceQueue({ queue }) {
+    const getAlbumArtUrl = (item) => {
+        const text = item.isEvent ? item.dance.split(' ').join('+') : `${item.song}+${item.artist}`.split(' ').join('+');
+        return `https://placehold.co/64x64/2d3748/edf2f7?text=${text.substring(0, 10)}`;
+    };
+
+    return (
+        <div className="bg-gray-800 border border-orange-500 rounded-lg p-6 md:p-8 shadow-2xl shadow-orange-500/20">
+            <h2 className="text-3xl font-bold text-white text-center mb-6 flex items-center justify-center gap-3"><QueueIcon /> Dance Queue</h2>
+            {queue.length > 0 ? (
+                <ul className="space-y-4">
+                    {queue.map((item, index) => (
+                        <li key={item.id} className="bg-gray-700 rounded-lg p-4 animate-fade-in">
+                            <div className="flex items-center gap-4">
+                                <span className="text-2xl font-bold text-orange-400 w-6 text-center">{index + 1}</span>
+                                <img src={getAlbumArtUrl(item)} alt="Album Art" className="w-16 h-16 rounded-md bg-gray-600" onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/64x64/2d3748/edf2f7?text=Error'; }} />
+                                <div>
+                                    <p className={`font-bold text-lg ${item.isEvent ? 'text-yellow-400' : 'text-white'}`}>{item.dance}</p>
+                                    {!item.isEvent ? (
+                                        <>
+                                            <p className="text-gray-300">{item.spotify ? <a href={item.spotify} target="_blank" rel="noopener noreferrer" className="hover:underline text-blue-400 flex items-center gap-2">{item.song} <LinkIcon className="w-4 h-4" /></a> : item.song}</p>
+                                            <p className="text-sm text-gray-400">by {item.artist}</p>
+                                        </>
+                                    ) : <p className="text-gray-300">{item.song}</p>}
+                                </div>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <p className="text-center text-gray-400 py-8">The dance queue is currently empty. Submit a request!</p>
+            )}
+        </div>
+    );
+}
+
+function DJConsole({ djName, onLogout, firebase }) {
+    const [requests, setRequests] = useState([]);
+    const [queue, setQueue] = useState([]);
+    const [venmo, setVenmo] = useState('');
+    const [cashapp, setCashapp] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+    const [editingSong, setEditingSong] = useState(null);
+    const [showTipSaveSuccess, setShowTipSaveSuccess] = useState(false);
+    const [eventToAdd, setEventToAdd] = useState(null);
     
-    <!-- Firebase SDKs (v8 for compatibility with single-file setup) -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    const dragItem = useRef(null);
+    const dragOverItem = useRef(null);
 
-    <style>
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background: radial-gradient(circle, rgba(31,25,48,1) 0%, rgba(17,14,28,1) 100%);
-        }
-        @keyframes fade-in { 
-            from { opacity: 0; transform: translateY(-10px); } 
-            to { opacity: 1; transform: translateY(0); } 
-        }
-        .animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
-    </style>
-</head>
-<body class="bg-gray-900 text-white">
-    <div id="root">
-        <div class="min-h-screen flex items-center justify-center text-xl">Initializing App...</div>
-    </div>
+    useEffect(() => {
+        const unsubscribeRequests = firebase.collections.requests
+            .orderBy("createdAt", "desc")
+            .onSnapshot(snapshot => {
+                const newRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(r => r.status === 'pending');
+                setRequests(newRequests);
+            }, (error) => console.error("Requests snapshot error:", error));
 
-    <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
-
-        // --- Helper Components & Data ---
-        function Icon({ path, className = "w-6 h-6" }) {
-            return (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
-                    <path d={path} />
-                </svg>
-            );
-        }
-
-        const MusicNoteIcon = () => <Icon path="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />;
-        const QueueIcon = () => <Icon path="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />;
-        const LinkIcon = () => <Icon path="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z" />;
-        const DjIcon = () => <Icon path="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />;
-        const CloseIcon = () => <Icon path="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />;
-        const VenmoIcon = () => <Icon className="w-8 h-8" path="M16.35,6.62c-0.28-0.59-0.7-1.12-1.23-1.55c-1.25-1-3.1-1.5-5.12-1.5c-2.63,0-4.97,0.88-6.67,2.71 c-1.29,1.39-2.03,3.2-2.03,5.19c0,2.4,0.99,4.3,2.83,5.43c1.78,1.09,4.1,1.5,6.87,1.5c1.14,0,2.23-0.1,3.25-0.3 c-0.12,0.6-0.3,1.15-0.54,1.66c-0.2,0.41-0.43,0.8-0.7,1.15c-0.3,0.38-0.63,0.72-1,1c-0.1,0.08-0.2,0.15-0.29,0.21 c-0.01,0.01-0.02,0.01-0.02,0.02c-0.4,0.29-0.85,0.51-1.34,0.65c-1.35,0.4-2.88,0.56-4.49,0.56c-4.91,0-8.88-2.4-10.42-7.25 C0.1,14.2-0.24,11.3,0.29,8.49c0.51-2.7,2.11-4.9,4.53-6.32C6.83,0.93,9.26,0.29,11.99,0.29c2.25,0,4.25,0.49,5.88,1.47 c1.3,0.79,2.28,1.98,2.83,3.48c0.16,0.42,0.28,0.85,0.38,1.29L16.35,6.62z" />;
-        const CashAppIcon = () => <Icon className="w-8 h-8" path="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.5 15.5h-2v-2.5h2V15zm0-4.5h-2v-1h2v1zm0-2.5h-2v-1h2v1zm4 7H12v-1.5h2.5V15zm0-2.5H12v-1h2.5v1zm0-2.5H12v-1h2.5v1zm0-2.5H12v-1h2.5v1z" />;
-        const DragHandleIcon = () => <Icon className="w-5 h-5 cursor-grab" path="M20 9H4v2h16V9zM4 15h16v-2H4v2z" />;
-        const EditIcon = () => <Icon className="w-5 h-5" path="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />;
-        const DeleteIcon = () => <Icon className="w-5 h-5" path="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />;
-        const UpArrowIcon = () => <Icon className="w-5 h-5" path="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />;
-        const DownArrowIcon = () => <Icon className="w-5 h-5" path="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />;
-        const CheckIcon = () => <Icon className="w-5 h-5 text-green-400" path="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />;
-
-        const NEON_BOOTS_DANCES = [
-            { dance: 'Tush Push', song: 'Any Man of Mine', artist: 'Shania Twain' },
-            { dance: 'Good Time', song: 'Good Time', artist: 'Alan Jackson' },
-            { dance: 'Electric Slide', song: 'Electric Boogie', artist: 'Marcia Griffiths' },
-            { dance: 'Copperhead Road', song: 'Copperhead Road', artist: 'Steve Earle' },
-            { dance: 'Watermelon Crawl', song: 'Watermelon Crawl', artist: 'Tracy Byrd' },
-            { dance: 'Boot Scootin\' Boogie', song: 'Boot Scootin\' Boogie', artist: 'Brooks & Dunn' },
-        ];
-
-        const COMMON_EVENTS = [
-            'First Line Dance Lesson', 
-            'Second Line Dance Lesson', 
-            'Partner Dance Break', 
-            'Last Call', 
-            'Closing Time'
-        ];
-
-        // --- Sample Data Population ---
-        const populateSampleData = async (db, collections) => {
+        const unsubscribeQueue = firebase.collections.queue
+            .orderBy("order")
+            .onSnapshot(snapshot => {
+                const newQueue = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setQueue(newQueue);
+            }, (error) => console.error("Queue snapshot error:", error));
+        
+        const fetchSettings = async () => {
+            setIsLoading(true);
             try {
-                const flagDoc = await collections.sampleDataFlag.get();
-                if (flagDoc.exists) return;
-
-                console.log("Populating sample data for the first time...");
-                const batch = db.batch();
-
-                const sampleRequests = [
-                    { dance: 'Two Step', song: 'Neon Moon', artist: 'Brooks & Dunn', customerName: 'Alice', status: 'pending', createdAt: new Date(), spotify: '' },
-                    { dance: 'Waltz', song: 'Tennessee Whiskey', artist: 'Chris Stapleton', customerName: 'Bob', status: 'pending', createdAt: new Date(), spotify: '' },
-                    { dance: 'Line Dance', song: 'Good Time', artist: 'Alan Jackson', customerName: 'Charlie', status: 'pending', createdAt: new Date(), spotify: '' },
-                ];
-
-                const sampleQueue = [
-                    { dance: 'West Coast Swing', song: 'Gives Me Shivers', artist: 'Ed Sheeran', customerName: 'DJ', status: 'queued', order: 0, queuedAt: new Date(), isEvent: false, spotify: '' },
-                    { dance: 'Partner Dance Break', song: 'Couples Skate!', artist: 'Event', isEvent: true, order: 1, queuedAt: new Date() },
-                    { dance: 'Country Swing', song: 'Wagon Wheel', artist: 'Darius Rucker', customerName: 'DJ', status: 'queued', order: 2, queuedAt: new Date(), isEvent: false, spotify: '' },
-                ];
-
-                sampleRequests.forEach(req => {
-                    const docRef = collections.requests.doc();
-                    batch.set(docRef, req);
-                });
-
-                sampleQueue.forEach(item => {
-                    const docRef = collections.queue.doc();
-                    batch.set(docRef, item);
-                });
-
-                batch.set(collections.sampleDataFlag, { populated: true });
-
-                await batch.commit();
-                console.log("Sample data populated.");
+                const docRef = firebase.docs.settings(djName.toLowerCase());
+                const docSnap = await docRef.get();
+                if (docSnap.exists) {
+                    setVenmo(docSnap.data().venmoUsername || '');
+                    setCashapp(docSnap.data().cashappUsername || '');
+                }
             } catch (error) {
-                console.error("Error populating sample data:", error);
+                console.error("Error fetching DJ settings:", error);
+            } finally {
+                setIsLoading(false);
             }
         };
+        fetchSettings();
 
-        // --- App Components ---
+        return () => { unsubscribeRequests(); unsubscribeQueue(); };
+    }, [djName, firebase]);
 
-        function DJLogin({ onLogin }) {
-            const [username, setUsername] = useState('');
-            const [password, setPassword] = useState('');
-            const [error, setError] = useState('');
+    const handleSaveSettings = async () => {
+        try {
+            await firebase.docs.settings(djName.toLowerCase()).set({ venmoUsername: venmo, cashappUsername: cashapp }, { merge: true });
+            setShowTipSaveSuccess(true);
+            setTimeout(() => setShowTipSaveSuccess(false), 3000);
+        } catch (error) {
+            console.error("Error saving settings:", error);
+        }
+    };
 
-            const handleLogin = (e) => {
-                e.preventDefault();
-                if ((username.toLowerCase() === 'angie' || username.toLowerCase() === 'justin') && password === 'puppies') {
-                    onLogin(username);
-                    setError('');
-                } else {
-                    setError('Invalid username or password.');
-                }
-            };
+    const handleAddToQueue = async (itemData, position) => {
+        let newOrder;
+        if (position === 'next') {
+            const firstItemOrder = queue.length > 0 ? queue[0].order : -1;
+            newOrder = firstItemOrder - 1;
+        } else { // 'last'
+            const lastItemOrder = queue.length > 0 ? queue[queue.length - 1].order : 0;
+            newOrder = lastItemOrder + 1;
+        }
+        
+        try {
+            const { id, ...data } = itemData;
+            await firebase.collections.queue.add({ ...data, status: 'queued', queuedAt: new Date(), order: newOrder });
+            if (!itemData.isEvent) {
+                await firebase.collections.requests.doc(id).update({ status: 'queued' });
+            }
+        } catch (error) {
+            console.error("Error adding to queue:", error);
+        }
+    };
 
-            return (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-                    <div className="bg-gray-800 border border-red-500 rounded-lg p-8 shadow-2xl shadow-red-500/20 w-full max-w-sm">
-                        <h2 className="text-3xl font-bold text-white text-center mb-6">DJ Login</h2>
-                        <form onSubmit={handleLogin}>
-                            <div className="mb-4">
-                                <label className="block text-red-400 text-sm font-bold mb-2" htmlFor="username">DJ Name</label>
-                                <input id="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="Angie or Justin"/>
-                            </div>
-                            <div className="mb-6">
-                                <label className="block text-red-400 text-sm font-bold mb-2" htmlFor="password">Password</label>
-                                <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="••••••••"/>
-                            </div>
-                            {error && <p className="text-yellow-400 text-center text-sm mb-4">{error}</p>}
-                            <button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300">Login</button>
-                        </form>
-                    </div>
+    const handleSaveEventToQueue = (eventName, notes) => {
+        const eventData = {
+            dance: eventName,
+            song: notes || '',
+            artist: 'Event',
+            isEvent: true,
+        };
+        handleAddToQueue(eventData, 'last');
+        setEventToAdd(null);
+    };
+
+    const handleDeleteRequest = async (id) => {
+        try {
+            await firebase.collections.requests.doc(id).delete();
+        } catch (error) {
+            console.error("Error deleting request:", error);
+        }
+    };
+
+    const handleUpdateSong = async (id, data) => {
+        try {
+            await firebase.collections.queue.doc(id).update(data);
+        } catch (error) {
+            console.error("Error updating song:", error);
+        }
+    };
+
+    const handleDeleteFromQueue = async (id) => {
+        try {
+            await firebase.collections.queue.doc(id).delete();
+        } catch (error) {
+            console.error("Error deleting from queue:", error);
+        }
+    };
+
+    const handleMoveInQueue = async (index, direction) => {
+        const item = queue[index];
+        const otherItemIndex = direction === 'up' ? index - 1 : index + 1;
+        if (otherItemIndex < 0 || otherItemIndex >= queue.length) return;
+        const otherItem = queue[otherItemIndex];
+
+        const batch = firebase.db.batch();
+        const itemRef = firebase.collections.queue.doc(item.id);
+        const otherItemRef = firebase.collections.queue.doc(otherItem.id);
+        
+        batch.update(itemRef, { order: otherItem.order });
+        batch.update(otherItemRef, { order: item.order });
+        
+        await batch.commit();
+    };
+    
+    const handleDragSort = async () => {
+        if (dragItem.current === null || dragOverItem.current === null) return;
+        const draggedItem = queue[dragItem.current];
+        
+        if (!draggedItem || dragItem.current === dragOverItem.current) return;
+
+        const newQueue = [...queue];
+        newQueue.splice(dragItem.current, 1);
+        newQueue.splice(dragOverItem.current, 0, draggedItem);
+        
+        const batch = firebase.db.batch();
+        newQueue.forEach((item, index) => {
+            const itemRef = firebase.collections.queue.doc(item.id);
+            batch.update(itemRef, { order: index });
+        });
+        await batch.commit();
+
+        dragItem.current = null;
+        dragOverItem.current = null;
+    };
+    
+    const getAlbumArtUrl = (item) => {
+        const text = item.isEvent ? item.dance.split(' ').join('+') : `${item.song}+${item.artist}`.split(' ').join('+');
+        return `https://placehold.co/48x48/2d3748/edf2f7?text=${text.substring(0, 10)}`;
+    };
+
+    return (
+        <div className="p-4 md:p-8 min-h-screen">
+            {editingSong && <EditSongModal song={editingSong} onClose={() => setEditingSong(null)} onSave={handleUpdateSong} />}
+            {eventToAdd && <EventNotesModal eventName={eventToAdd} onClose={() => setEventToAdd(null)} onSave={handleSaveEventToQueue} />}
+            <header className="flex justify-between items-center mb-8">
+                <h1 className="text-3xl md:text-4xl font-bold text-white">DJ Console</h1>
+                <div>
+                    <span className="text-white mr-4">Welcome, {djName}!</span>
+                    <button onClick={onLogout} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Logout</button>
                 </div>
-            );
-        }
+            </header>
 
-        function SongRequestForm({ onSubmitted, firebase }) {
-            const [dance, setDance] = useState('');
-            const [song, setSong] = useState('');
-            const [artist, setArtist] = useState('');
-            const [spotify, setSpotify] = useState('');
-            const [name, setName] = useState('');
-            const [isSubmitting, setIsSubmitting] = useState(false);
-
-            const handleDanceSelect = (e) => {
-                const selectedDanceName = e.target.value;
-                if (selectedDanceName === "") {
-                    setDance(''); setSong(''); setArtist('');
-                    return;
-                }
-                const selectedDance = NEON_BOOTS_DANCES.find(d => d.dance === selectedDanceName);
-                if (selectedDance) {
-                    setDance(selectedDance.dance);
-                    setSong(selectedDance.song);
-                    setArtist(selectedDance.artist);
-                }
-            };
-
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                if (!dance || !song || !artist || !name) return;
-                setIsSubmitting(true);
-                try {
-                    await firebase.collections.requests.add({ dance, song, artist, spotify, customerName: name, status: 'pending', createdAt: new Date() });
-                    setDance(''); setSong(''); setArtist(''); setSpotify(''); setName('');
-                    onSubmitted();
-                } catch (error) {
-                    console.error("Error submitting request:", error);
-                } finally {
-                    setIsSubmitting(false);
-                }
-            };
-
-            return (
-                <div className="bg-gray-800 border border-blue-500 rounded-lg p-6 md:p-8 shadow-2xl shadow-blue-500/20">
-                    <h2 className="text-3xl font-bold text-white text-center mb-6">Submit a Song Request</h2>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <select onChange={handleDanceSelect} defaultValue="" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">-- Select a Taught Line Dance (Optional) --</option>
-                            {NEON_BOOTS_DANCES.map(d => <option key={d.dance} value={d.dance}>{d.dance}</option>)}
-                        </select>
-                        <input type="text" value={dance} onChange={e => setDance(e.target.value)} placeholder="Dance Name/Style (e.g., Two Step)" required className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <input type="text" value={song} onChange={e => setSong(e.target.value)} placeholder="Song Name (e.g., Gives Me Shivers)" required className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <input type="text" value={artist} onChange={e => setArtist(e.target.value)} placeholder="Artist" required className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <input type="url" value={spotify} onChange={e => setSpotify(e.target.value)} placeholder="Spotify Link (Optional)" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your Name" required className="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300 disabled:bg-blue-800 disabled:cursor-not-allowed">
-                            {isSubmitting ? 'Submitting...' : 'Submit Request'}
-                        </button>
-                    </form>
-                </div>
-            );
-        }
-
-        function Modal({ title, children, onClose }) {
-            return (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-                    <div className="bg-gray-800 border border-orange-500 rounded-lg p-6 shadow-2xl shadow-orange-500/20 w-full max-w-lg text-center relative">
-                        <button onClick={onClose} className="absolute top-2 right-2 text-gray-400 hover:text-white"><CloseIcon /></button>
-                        <h2 className="text-2xl font-bold text-white mb-4">{title}</h2>
-                        <div className="text-gray-300">{children}</div>
-                    </div>
-                </div>
-            );
-        }
-
-        function EditSongModal({ song, onClose, onSave }) {
-            const [dance, setDance] = useState(song.dance);
-            const [songName, setSongName] = useState(song.song);
-            const [artist, setArtist] = useState(song.artist);
-
-            const handleSave = () => {
-                onSave(song.id, { dance, song: songName, artist });
-                onClose();
-            };
-
-            return (
-                <Modal title="Edit Song" onClose={onClose}>
-                    <div className="space-y-4 text-left">
-                        <input type="text" value={dance} onChange={e => setDance(e.target.value)} placeholder="Dance Name/Style" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                        <input type="text" value={songName} onChange={e => setSongName(e.target.value)} placeholder="Song Name" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                        <input type="text" value={artist} onChange={e => setArtist(e.target.value)} placeholder="Artist" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                    </div>
-                    <button onClick={handleSave} className="mt-6 w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Save Changes</button>
-                </Modal>
-            );
-        }
-
-        function EventNotesModal({ eventName, onClose, onSave }) {
-            const [notes, setNotes] = useState('');
-
-            const handleSave = () => {
-                onSave(eventName, notes);
-                onClose();
-            };
-
-            return (
-                <Modal title={eventName} onClose={onClose}>
-                    <div className="space-y-4 text-left">
-                        <label className="block text-orange-400 text-sm font-bold mb-2" htmlFor="event-notes">Optional Notes</label>
-                        <input id="event-notes" type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g., Name of the dance being taught" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                    </div>
-                    <button onClick={handleSave} className="mt-6 w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Add to Queue</button>
-                </Modal>
-            );
-        }
-
-
-        function TipJar({ djSettings }) {
-            const venmoLink = djSettings.venmo ? `https://venmo.com/u/${djSettings.venmo}` : null;
-            const cashAppLink = djSettings.cashapp ? `https://cash.app/$${djSettings.cashapp}` : null;
-            if (!venmoLink && !cashAppLink) return null;
-
-            return (
-                <div className="mt-6 text-center">
-                    <h3 className="text-xl font-bold text-orange-400 mb-4">Enjoying the music? Tip the DJ!</h3>
-                    <div className="flex justify-center items-center space-x-6">
-                        {venmoLink && <a href={venmoLink} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-blue-400 hover:text-blue-300 transition-colors"><VenmoIcon /><span className="mt-1 text-sm font-semibold">Venmo</span></a>}
-                        {cashAppLink && <a href={cashAppLink} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-green-400 hover:text-green-300 transition-colors"><CashAppIcon /><span className="mt-1 text-sm font-semibold">Cash App</span></a>}
-                    </div>
-                </div>
-            );
-        }
-
-        function DanceQueue({ queue }) {
-            const getAlbumArtUrl = (item) => {
-                const text = item.isEvent ? item.dance.split(' ').join('+') : `${item.song}+${item.artist}`.split(' ').join('+');
-                return `https://placehold.co/64x64/2d3748/edf2f7?text=${text.substring(0, 10)}`;
-            };
-
-            return (
-                <div className="bg-gray-800 border border-orange-500 rounded-lg p-6 md:p-8 shadow-2xl shadow-orange-500/20">
-                    <h2 className="text-3xl font-bold text-white text-center mb-6 flex items-center justify-center gap-3"><QueueIcon /> Dance Queue</h2>
-                    {queue.length > 0 ? (
-                        <ul className="space-y-4">
-                            {queue.map((item, index) => (
-                                <li key={item.id} className="bg-gray-700 rounded-lg p-4 animate-fade-in">
-                                    <div className="flex items-center gap-4">
-                                        <span className="text-2xl font-bold text-orange-400 w-6 text-center">{index + 1}</span>
-                                        <img src={getAlbumArtUrl(item)} alt="Album Art" className="w-16 h-16 rounded-md bg-gray-600" onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/64x64/2d3748/edf2f7?text=Error'; }} />
-                                        <div>
-                                            <p className={`font-bold text-lg ${item.isEvent ? 'text-yellow-400' : 'text-white'}`}>{item.dance}</p>
-                                            {!item.isEvent ? (
-                                                <>
-                                                    <p className="text-gray-300">{item.spotify ? <a href={item.spotify} target="_blank" rel="noopener noreferrer" className="hover:underline text-blue-400 flex items-center gap-2">{item.song} <LinkIcon className="w-4 h-4" /></a> : item.song}</p>
-                                                    <p className="text-sm text-gray-400">by {item.artist}</p>
-                                                </>
-                                            ) : <p className="text-gray-300">{item.song}</p>}
-                                        </div>
-                                    </div>
-                                </li>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-1 space-y-8 flex flex-col">
+                    <div className="bg-gray-800 border border-purple-500 rounded-lg p-6 shadow-lg">
+                        <h2 className="text-2xl font-bold text-white mb-4">Common Events</h2>
+                        <div className="grid grid-cols-2 gap-2">
+                            {COMMON_EVENTS.map(event => (
+                                <button key={event} onClick={() => setEventToAdd(event)} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold py-2 px-2 rounded transition-colors">{event}</button>
                             ))}
-                        </ul>
-                    ) : (
-                        <p className="text-center text-gray-400 py-8">The dance queue is currently empty. Submit a request!</p>
-                    )}
-                </div>
-            );
-        }
-
-        function DJConsole({ djName, onLogout, firebase }) {
-            const [requests, setRequests] = useState([]);
-            const [queue, setQueue] = useState([]);
-            const [venmo, setVenmo] = useState('');
-            const [cashapp, setCashapp] = useState('');
-            const [isLoading, setIsLoading] = useState(true);
-            const [editingSong, setEditingSong] = useState(null);
-            const [showTipSaveSuccess, setShowTipSaveSuccess] = useState(false);
-            const [eventToAdd, setEventToAdd] = useState(null);
-            
-            const dragItem = useRef(null);
-            const dragOverItem = useRef(null);
-
-            useEffect(() => {
-                const unsubscribeRequests = firebase.collections.requests
-                    .orderBy("createdAt", "desc")
-                    .onSnapshot(snapshot => {
-                        const newRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(r => r.status === 'pending');
-                        setRequests(newRequests);
-                    }, (error) => console.error("Requests snapshot error:", error));
-
-                const unsubscribeQueue = firebase.collections.queue
-                    .orderBy("order")
-                    .onSnapshot(snapshot => {
-                        const newQueue = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        setQueue(newQueue);
-                    }, (error) => console.error("Queue snapshot error:", error));
-                
-                const fetchSettings = async () => {
-                    setIsLoading(true);
-                    try {
-                        const docRef = firebase.docs.settings(djName.toLowerCase());
-                        const docSnap = await docRef.get();
-                        if (docSnap.exists) {
-                            setVenmo(docSnap.data().venmoUsername || '');
-                            setCashapp(docSnap.data().cashappUsername || '');
-                        }
-                    } catch (error) {
-                        console.error("Error fetching DJ settings:", error);
-                    } finally {
-                        setIsLoading(false);
-                    }
-                };
-                fetchSettings();
-
-                return () => { unsubscribeRequests(); unsubscribeQueue(); };
-            }, [djName, firebase]);
-
-            const handleSaveSettings = async () => {
-                try {
-                    await firebase.docs.settings(djName.toLowerCase()).set({ venmoUsername: venmo, cashappUsername: cashapp }, { merge: true });
-                    setShowTipSaveSuccess(true);
-                    setTimeout(() => setShowTipSaveSuccess(false), 3000);
-                } catch (error) {
-                    console.error("Error saving settings:", error);
-                }
-            };
-
-            const handleAddToQueue = async (itemData, position) => {
-                let newOrder;
-                if (position === 'next') {
-                    const firstItemOrder = queue.length > 0 ? queue[0].order : -1;
-                    newOrder = firstItemOrder - 1;
-                } else { // 'last'
-                    const lastItemOrder = queue.length > 0 ? queue[queue.length - 1].order : 0;
-                    newOrder = lastItemOrder + 1;
-                }
-                
-                try {
-                    const { id, ...data } = itemData;
-                    await firebase.collections.queue.add({ ...data, status: 'queued', queuedAt: new Date(), order: newOrder });
-                    if (!itemData.isEvent) {
-                        await firebase.collections.requests.doc(id).update({ status: 'queued' });
-                    }
-                } catch (error) {
-                    console.error("Error adding to queue:", error);
-                }
-            };
-
-            const handleSaveEventToQueue = (eventName, notes) => {
-                const eventData = {
-                    dance: eventName,
-                    song: notes || '',
-                    artist: 'Event',
-                    isEvent: true,
-                };
-                handleAddToQueue(eventData, 'last');
-                setEventToAdd(null);
-            };
-
-            const handleDeleteRequest = async (id) => {
-                try {
-                    await firebase.collections.requests.doc(id).delete();
-                } catch (error) {
-                    console.error("Error deleting request:", error);
-                }
-            };
-
-            const handleUpdateSong = async (id, data) => {
-                try {
-                    await firebase.collections.queue.doc(id).update(data);
-                } catch (error) {
-                    console.error("Error updating song:", error);
-                }
-            };
-
-            const handleDeleteFromQueue = async (id) => {
-                try {
-                    await firebase.collections.queue.doc(id).delete();
-                } catch (error) {
-                    console.error("Error deleting from queue:", error);
-                }
-            };
-
-            const handleMoveInQueue = async (index, direction) => {
-                const item = queue[index];
-                const otherItemIndex = direction === 'up' ? index - 1 : index + 1;
-                if (otherItemIndex < 0 || otherItemIndex >= queue.length) return;
-                const otherItem = queue[otherItemIndex];
-
-                const batch = firebase.db.batch();
-                const itemRef = firebase.collections.queue.doc(item.id);
-                const otherItemRef = firebase.collections.queue.doc(otherItem.id);
-                
-                batch.update(itemRef, { order: otherItem.order });
-                batch.update(otherItemRef, { order: item.order });
-                
-                await batch.commit();
-            };
-            
-            const handleDragSort = async () => {
-                if (dragItem.current === null || dragOverItem.current === null) return;
-                const draggedItem = queue[dragItem.current];
-                
-                if (!draggedItem || dragItem.current === dragOverItem.current) return;
-
-                const newQueue = [...queue];
-                newQueue.splice(dragItem.current, 1);
-                newQueue.splice(dragOverItem.current, 0, draggedItem);
-                
-                const batch = firebase.db.batch();
-                newQueue.forEach((item, index) => {
-                    const itemRef = firebase.collections.queue.doc(item.id);
-                    batch.update(itemRef, { order: index });
-                });
-                await batch.commit();
-
-                dragItem.current = null;
-                dragOverItem.current = null;
-            };
-            
-            const getAlbumArtUrl = (item) => {
-                const text = item.isEvent ? item.dance.split(' ').join('+') : `${item.song}+${item.artist}`.split(' ').join('+');
-                return `https://placehold.co/48x48/2d3748/edf2f7?text=${text.substring(0, 10)}`;
-            };
-
-            return (
-                <div className="p-4 md:p-8 min-h-screen">
-                    {editingSong && <EditSongModal song={editingSong} onClose={() => setEditingSong(null)} onSave={handleUpdateSong} />}
-                    {eventToAdd && <EventNotesModal eventName={eventToAdd} onClose={() => setEventToAdd(null)} onSave={handleSaveEventToQueue} />}
-                    <header className="flex justify-between items-center mb-8">
-                        <h1 className="text-3xl md:text-4xl font-bold text-white">DJ Console</h1>
-                        <div>
-                            <span className="text-white mr-4">Welcome, {djName}!</span>
-                            <button onClick={onLogout} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Logout</button>
                         </div>
-                    </header>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <div className="lg:col-span-1 space-y-8 flex flex-col">
-                            <div className="bg-gray-800 border border-purple-500 rounded-lg p-6 shadow-lg">
-                                <h2 className="text-2xl font-bold text-white mb-4">Common Events</h2>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {COMMON_EVENTS.map(event => (
-                                        <button key={event} onClick={() => setEventToAdd(event)} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold py-2 px-2 rounded transition-colors">{event}</button>
-                                    ))}
+                    </div>
+                    <div className="bg-gray-800 border border-red-500 rounded-lg p-6 shadow-lg">
+                        <h2 className="text-2xl font-bold text-white mb-4">Submitted Requests ({requests.length})</h2>
+                        <div className="space-y-4 max-h-[45vh] overflow-y-auto pr-2">
+                            {requests.length > 0 ? requests.map(req => (
+                                <div key={req.id} className="bg-gray-700 p-4 rounded-lg">
+                                    <p className="font-bold text-lg text-white">{req.dance}</p>
+                                    <p className="text-gray-300">{req.song} by {req.artist}</p>
+                                    <p className="text-sm text-gray-400">From: {req.customerName}</p>
+                                    {req.spotify && <a href={req.spotify} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-sm">Spotify Link</a>}
+                                    <div className="mt-3 grid grid-cols-3 gap-2">
+                                        <button onClick={() => handleAddToQueue(req, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors">Add Next</button>
+                                        <button onClick={() => handleAddToQueue(req, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors">Add Last</button>
+                                        <button onClick={() => handleDeleteRequest(req.id)} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors">Delete</button>
+                                    </div>
+                                </div>
+                            )) : <p className="text-gray-400">No new requests.</p>}
+                        </div>
+                    </div>
+                    <div className="bg-gray-800 border border-blue-500 rounded-lg p-6 shadow-lg mt-auto">
+                        <h2 className="text-2xl font-bold text-white mb-4">Tipping Links</h2>
+                        {isLoading ? <p className="text-gray-300">Loading...</p> : (
+                            <div className="space-y-4">
+                                <input type="text" value={venmo} onChange={e => setVenmo(e.target.value)} placeholder="Venmo Username" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                <input type="text" value={cashapp} onChange={e => setCashapp(e.target.value)} placeholder="Cash App $Cashtag" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                <div className="flex items-center gap-4">
+                                    <button onClick={handleSaveSettings} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Save Links</button>
+                                    {showTipSaveSuccess && <CheckIcon />}
                                 </div>
                             </div>
-                            <div className="bg-gray-800 border border-red-500 rounded-lg p-6 shadow-lg">
-                                <h2 className="text-2xl font-bold text-white mb-4">Submitted Requests ({requests.length})</h2>
-                                <div className="space-y-4 max-h-[45vh] overflow-y-auto pr-2">
-                                    {requests.length > 0 ? requests.map(req => (
-                                        <div key={req.id} className="bg-gray-700 p-4 rounded-lg">
-                                            <p className="font-bold text-lg text-white">{req.dance}</p>
-                                            <p className="text-gray-300">{req.song} by {req.artist}</p>
-                                            <p className="text-sm text-gray-400">From: {req.customerName}</p>
-                                            {req.spotify && <a href={req.spotify} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-sm">Spotify Link</a>}
-                                            <div className="mt-3 grid grid-cols-3 gap-2">
-                                                <button onClick={() => handleAddToQueue(req, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors">Add Next</button>
-                                                <button onClick={() => handleAddToQueue(req, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors">Add Last</button>
-                                                <button onClick={() => handleDeleteRequest(req.id)} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors">Delete</button>
-                                            </div>
-                                        </div>
-                                    )) : <p className="text-gray-400">No new requests.</p>}
+                        )}
+                    </div>
+                </div>
+                <div className="lg:col-span-2 bg-gray-800 border border-orange-500 rounded-lg p-6 shadow-lg">
+                    <h2 className="text-2xl font-bold text-white mb-4">Manage Dance Queue ({queue.length})</h2>
+                    <div className="space-y-2 max-h-[80vh] overflow-y-auto pr-2">
+                        {queue.length > 0 ? queue.map((item, index) => (
+                             <div key={item.id} draggable onDragStart={() => dragItem.current = index} onDragEnter={() => dragOverItem.current = index} onDragEnd={handleDragSort} onDragOver={(e) => e.preventDefault()}
+                                className={`bg-gray-700 p-2 rounded-lg flex items-center justify-between transition-all duration-300 ${dragOverItem.current === index ? 'bg-gray-600 scale-105' : ''}`}>
+                                <div className="flex items-center gap-3">
+                                    <DragHandleIcon />
+                                    <span className="text-xl font-bold text-orange-400 w-6 text-center">{index + 1}</span>
+                                    <img src={getAlbumArtUrl(item)} alt="Art" className="w-12 h-12 rounded-md bg-gray-600" onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/48x48/2d3748/edf2f7?text=Error'; }} />
+                                    <div>
+                                        <p className={`font-bold text-lg ${item.isEvent ? 'text-yellow-400' : 'text-white'}`}>{item.dance}</p>
+                                        {!item.isEvent ? (
+                                            <p className="text-gray-300 text-sm">{item.song} by {item.artist}</p>
+                                        ) : <p className="text-gray-300 text-sm">{item.song}</p>}
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="bg-gray-800 border border-blue-500 rounded-lg p-6 shadow-lg mt-auto">
-                                <h2 className="text-2xl font-bold text-white mb-4">Tipping Links</h2>
-                                {isLoading ? <p className="text-gray-300">Loading...</p> : (
-                                    <div className="space-y-4">
-                                        <input type="text" value={venmo} onChange={e => setVenmo(e.target.value)} placeholder="Venmo Username" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                                        <input type="text" value={cashapp} onChange={e => setCashapp(e.target.value)} placeholder="Cash App $Cashtag" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                                        <div className="flex items-center gap-4">
-                                            <button onClick={handleSaveSettings} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Save Links</button>
-                                            {showTipSaveSuccess && <CheckIcon />}
-                                        </div>
+                                {!item.isEvent && (
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => handleMoveInQueue(index, 'up')} className="p-1 rounded-full hover:bg-gray-600 disabled:opacity-20 disabled:cursor-not-allowed" disabled={index === 0}><UpArrowIcon /></button>
+                                        <button onClick={() => handleMoveInQueue(index, 'down')} className="p-1 rounded-full hover:bg-gray-600 disabled:opacity-20 disabled:cursor-not-allowed" disabled={index === queue.length - 1}><DownArrowIcon /></button>
+                                        <button onClick={() => setEditingSong(item)} className="p-1 rounded-full hover:bg-gray-600"><EditIcon /></button>
+                                        <button onClick={() => handleDeleteFromQueue(item.id)} className="p-1 rounded-full hover:bg-red-500 text-red-400 hover:text-white"><DeleteIcon /></button>
                                     </div>
                                 )}
+                                {item.isEvent && (
+                                     <button onClick={() => handleDeleteFromQueue(item.id)} className="p-1 rounded-full hover:bg-red-500 text-red-400 hover:text-white"><DeleteIcon /></button>
+                                )}
                             </div>
-                        </div>
-                        <div className="lg:col-span-2 bg-gray-800 border border-orange-500 rounded-lg p-6 shadow-lg">
-                            <h2 className="text-2xl font-bold text-white mb-4">Manage Dance Queue ({queue.length})</h2>
-                            <div className="space-y-2 max-h-[80vh] overflow-y-auto pr-2">
-                                {queue.length > 0 ? queue.map((item, index) => (
-                                     <div key={item.id} draggable onDragStart={() => dragItem.current = index} onDragEnter={() => dragOverItem.current = index} onDragEnd={handleDragSort} onDragOver={(e) => e.preventDefault()}
-                                        className={`bg-gray-700 p-2 rounded-lg flex items-center justify-between transition-all duration-300 ${dragOverItem.current === index ? 'bg-gray-600 scale-105' : ''}`}>
-                                        <div className="flex items-center gap-3">
-                                            <DragHandleIcon />
-                                            <span className="text-xl font-bold text-orange-400 w-6 text-center">{index + 1}</span>
-                                            <img src={getAlbumArtUrl(item)} alt="Art" className="w-12 h-12 rounded-md bg-gray-600" onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/48x48/2d3748/edf2f7?text=Error'; }} />
-                                            <div>
-                                                <p className={`font-bold text-lg ${item.isEvent ? 'text-yellow-400' : 'text-white'}`}>{item.dance}</p>
-                                                {!item.isEvent ? (
-                                                    <p className="text-gray-300 text-sm">{item.song} by {item.artist}</p>
-                                                ) : <p className="text-gray-300 text-sm">{item.song}</p>}
-                                            </div>
-                                        </div>
-                                        {!item.isEvent && (
-                                            <div className="flex items-center gap-2">
-                                                <button onClick={() => handleMoveInQueue(index, 'up')} className="p-1 rounded-full hover:bg-gray-600 disabled:opacity-20 disabled:cursor-not-allowed" disabled={index === 0}><UpArrowIcon /></button>
-                                                <button onClick={() => handleMoveInQueue(index, 'down')} className="p-1 rounded-full hover:bg-gray-600 disabled:opacity-20 disabled:cursor-not-allowed" disabled={index === queue.length - 1}><DownArrowIcon /></button>
-                                                <button onClick={() => setEditingSong(item)} className="p-1 rounded-full hover:bg-gray-600"><EditIcon /></button>
-                                                <button onClick={() => handleDeleteFromQueue(item.id)} className="p-1 rounded-full hover:bg-red-500 text-red-400 hover:text-white"><DeleteIcon /></button>
-                                            </div>
-                                        )}
-                                        {item.isEvent && (
-                                             <button onClick={() => handleDeleteFromQueue(item.id)} className="p-1 rounded-full hover:bg-red-500 text-red-400 hover:text-white"><DeleteIcon /></button>
-                                        )}
-                                    </div>
-                                )) : <p className="text-gray-400">Queue is empty. Add songs from the requests list.</p>}
-                            </div>
-                        </div>
+                        )) : <p className="text-gray-400">Queue is empty. Add songs from the requests list.</p>}
                     </div>
                 </div>
-            );
-        }
+            </div>
+        </div>
+    );
+}
 
-        function App() {
-            const [firebase, setFirebase] = useState(null);
-            const [view, setView] = useState('main');
-            const [djName, setDjName] = useState(null);
-            const [showThanksModal, setShowThanksModal] = useState(false);
-            const [queue, setQueue] = useState([]);
-            const [djSettings, setDjSettings] = useState({ venmo: null, cashapp: null });
-            const [isAuthReady, setIsAuthReady] = useState(false);
+export default function App() {
+    const [firebaseStatus, setFirebaseStatus] = useState('loading'); // loading, ready, error
+    const [firebaseServices, setFirebaseServices] = useState(null);
+    const [view, setView] = useState('main');
+    const [djName, setDjName] = useState(null);
+    const [showThanksModal, setShowThanksModal] = useState(false);
+    const [queue, setQueue] = useState([]);
+    const [djSettings, setDjSettings] = useState({ venmo: null, cashapp: null });
+    
+    useEffect(() => {
+        const initializeFirebase = () => {
+            try {
+                const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : {};
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-dj-app';
 
-            useEffect(() => {
-                try {
-                    const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : {};
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-dj-app';
-
-                    if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
-                        throw new Error("Firebase config is missing or empty.");
-                    }
-                    
-                    if (!window.firebase.apps.length) {
-                        window.firebase.initializeApp(firebaseConfig);
-                    }
-                    
-                    const auth = window.firebase.auth();
-                    const db = window.firebase.firestore();
-                    
-                    const publicPath = (collectionName) => `artifacts/${appId}/public/data/${collectionName}`;
-
-                    const firebaseServices = {
-                        auth,
-                        db,
-                        appId,
-                        collections: {
-                            requests: db.collection(publicPath('requests')),
-                            queue: db.collection(publicPath('queue')),
-                            settings: db.collection(publicPath('dj_settings')),
-                            sampleDataFlag: db.collection(publicPath('sample_data_flag')).doc('populated')
-                        },
-                        docs: {
-                            settings: (djName) => db.collection(publicPath('dj_settings')).doc(djName),
-                        }
-                    };
-                    setFirebase(firebaseServices);
-
-                    const signInUser = async () => {
-                        try {
-                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                await auth.signInWithCustomToken(__initial_auth_token);
-                            } else {
-                                await auth.signInAnonymously();
-                            }
-                        } catch (error) {
-                            console.error("Firebase sign-in failed:", error);
-                        }
-                    };
-
-                    const unsubscribe = auth.onAuthStateChanged((user) => {
-                        if (user) {
-                            setIsAuthReady(true);
-                        }
-                    });
-                    
-                    signInUser();
-                } catch (e) {
-                    console.error("FATAL: Firebase initialization failed.", e);
-                    setFirebase({ error: e });
+                if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
+                    throw new Error("Firebase config is missing or empty.");
                 }
-            }, []);
-
-            useEffect(() => {
-                if (!isAuthReady || !firebase || firebase.error) return;
-
-                populateSampleData(firebase.db, firebase.collections);
-
-                const unsubscribeQueue = firebase.collections.queue
-                    .orderBy("order")
-                    .onSnapshot(snapshot => {
-                        setQueue(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                    }, (error) => console.error("Queue snapshot listener error:", error));
                 
-                const fetchAllSettings = async () => {
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                const db = getFirestore(app);
+                
+                const publicPath = (collectionName) => `artifacts/${appId}/public/data/${collectionName}`;
+
+                const services = {
+                    auth,
+                    db,
+                    appId,
+                    collections: {
+                        requests: collection(db, publicPath('requests')),
+                        queue: collection(db, publicPath('queue')),
+                        settings: collection(db, publicPath('dj_settings')),
+                        sampleDataFlag: doc(db, publicPath('sample_data_flag'), 'populated')
+                    },
+                    docs: {
+                        settings: (djName) => doc(db, publicPath('dj_settings'), djName),
+                    }
+                };
+                setFirebaseServices(services);
+
+                const signInUser = async () => {
                     try {
-                        const angieSnap = await firebase.docs.settings('angie').get();
-                        const justinSnap = await firebase.docs.settings('justin').get();
-                        const angieSettings = angieSnap.data();
-                        const justinSettings = justinSnap.data();
-                        setDjSettings({
-                            venmo: angieSettings?.venmoUsername || justinSettings?.venmoUsername,
-                            cashapp: angieSettings?.cashappUsername || justinSettings?.cashappUsername,
-                        });
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
                     } catch (error) {
-                        console.error("Error fetching all settings:", error);
+                        console.error("Firebase sign-in failed:", error);
+                        setFirebaseStatus('error');
                     }
                 };
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        setFirebaseStatus('ready');
+                    }
+                });
                 
-                fetchAllSettings();
-                const settingsListener = firebase.collections.settings.onSnapshot(() => {
-                    fetchAllSettings();
-                }, (error) => console.error("Settings snapshot listener error:", error));
-
-                return () => { 
-                    unsubscribeQueue(); 
-                    settingsListener(); 
-                };
-            }, [isAuthReady, firebase]);
-
-            const handleLogin = (name) => { setDjName(name); setView('dj-console'); };
-            const handleLogout = () => { setDjName(null); setView('main'); };
-            const handleRequestSubmitted = () => { setShowThanksModal(true); setView('main'); };
-
-            const renderView = () => {
-                switch (view) {
-                    case 'request': return <SongRequestForm onSubmitted={handleRequestSubmitted} firebase={firebase} />;
-                    case 'dj-login': return <DJLogin onLogin={handleLogin} />;
-                    case 'dj-console': return <DJConsole djName={djName} onLogout={handleLogout} firebase={firebase} />;
-                    default: return (
-                        <React.Fragment>
-                            <div className="text-center mb-8">
-                                <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-2">Neon Boots</h1>
-                                <p className="text-lg md:text-xl text-orange-300">Dance Request & Queue</p>
-                            </div>
-                            <div className="flex flex-col md:flex-row justify-center items-center gap-4 mb-8">
-                                <a href="https://www.neonbootsclub.com/" target="_blank" rel="noopener noreferrer" className="w-full md:w-auto text-center bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 flex items-center justify-center gap-2"><LinkIcon /> Visit Website</a>
-                                <button onClick={() => setView('request')} className="w-full md:w-auto text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 flex items-center justify-center gap-2"><MusicNoteIcon /> Submit a Request</button>
-                            </div>
-                            <DanceQueue queue={queue} />
-                        </React.Fragment>
-                    );
-                }
-            };
-
-            if (!firebase || !isAuthReady) {
-                return <div className="bg-gray-900 min-h-screen flex items-center justify-center text-white text-xl">Initializing App...</div>;
+                signInUser();
+            } catch (e) {
+                console.error("FATAL: Firebase initialization failed.", e);
+                setFirebaseStatus('error');
             }
+        };
+        initializeFirebase();
+    }, []);
 
-            if (firebase.error) {
-                return <div className="bg-gray-900 min-h-screen flex items-center justify-center text-red-500 text-xl p-8 text-center">Error: Could not start the app. Please ensure Firebase configuration is correct. Check the console for more details.</div>;
+    useEffect(() => {
+        if (firebaseStatus !== 'ready' || !firebaseServices) return;
+
+        populateSampleData(firebaseServices.db, firebaseServices.collections);
+
+        const unsubscribeQueue = onSnapshot(query(firebaseServices.collections.queue, orderBy("order")), (snapshot) => {
+            setQueue(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (error) => console.error("Queue snapshot listener error:", error));
+        
+        const fetchAllSettings = async () => {
+            try {
+                const angieSnap = await getDoc(firebaseServices.docs.settings('angie'));
+                const justinSnap = await getDoc(firebaseServices.docs.settings('justin'));
+                const angieSettings = angieSnap.data();
+                const justinSettings = justinSnap.data();
+                setDjSettings({
+                    venmo: angieSettings?.venmoUsername || justinSettings?.venmoUsername,
+                    cashapp: angieSettings?.cashappUsername || justinSettings?.cashappUsername,
+                });
+            } catch (error) {
+                console.error("Error fetching all settings:", error);
             }
+        };
+        
+        fetchAllSettings();
+        const settingsListener = onSnapshot(firebaseServices.collections.settings, () => {
+            fetchAllSettings();
+        }, (error) => console.error("Settings snapshot listener error:", error));
 
-            return (
-                <div className="text-white min-h-screen">
-                    <div className="container mx-auto p-4 md:p-8">
-                        {renderView()}
-                        {view === 'main' && (
-                            <footer className="text-center mt-8">
-                                <button onClick={() => setView('dj-login')} className="text-gray-400 hover:text-white transition-colors flex items-center justify-center gap-2 mx-auto"><DjIcon /> DJ Login</button>
-                            </footer>
-                        )}
-                        {showThanksModal && (
-                            <Modal title="Request Submitted!" onClose={() => setShowThanksModal(false)}>
-                                <p className="mb-4">Thank you for submitting a request. The DJ will do their best to accommodate. Submitting does not guarantee anything.</p>
-                                <p className="font-bold text-orange-300">Priority is given to dances that have been taught at Neon Boots.</p>
-                                <TipJar djSettings={djSettings} />
-                            </Modal>
-                        )}
+        return () => { 
+            unsubscribeQueue(); 
+            settingsListener(); 
+        };
+    }, [firebaseStatus, firebaseServices]);
+
+    const handleLogin = (name) => { setDjName(name); setView('dj-console'); };
+    const handleLogout = () => { setDjName(null); setView('main'); };
+    const handleRequestSubmitted = () => { setShowThanksModal(true); setView('main'); };
+
+    const renderView = () => {
+        switch (view) {
+            case 'request': return <SongRequestForm onSubmitted={handleRequestSubmitted} firebase={firebaseServices} />;
+            case 'dj-login': return <DJLogin onLogin={handleLogin} />;
+            case 'dj-console': return <DJConsole djName={djName} onLogout={handleLogout} firebase={firebaseServices} />;
+            default: return (
+                <React.Fragment>
+                    <div className="text-center mb-8">
+                        <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-2">Neon Boots</h1>
+                        <p className="text-lg md:text-xl text-orange-300">Dance Request & Queue</p>
                     </div>
-                </div>
+                    <div className="flex flex-col md:flex-row justify-center items-center gap-4 mb-8">
+                        <a href="https://www.neonbootsclub.com/" target="_blank" rel="noopener noreferrer" className="w-full md:w-auto text-center bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 flex items-center justify-center gap-2"><LinkIcon /> Visit Website</a>
+                        <button onClick={() => setView('request')} className="w-full md:w-auto text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 flex items-center justify-center gap-2"><MusicNoteIcon /> Submit a Request</button>
+                    </div>
+                    <DanceQueue queue={queue} />
+                </React.Fragment>
             );
         }
+    };
 
-        ReactDOM.render(<App />, document.getElementById('root'));
+    if (firebaseStatus === 'loading') {
+        return <div className="bg-gray-900 min-h-screen flex items-center justify-center text-white text-xl">Initializing App...</div>;
+    }
 
-    </script>
-</body>
-</html>
-" code between  and  in the most up-to-date Canvas "Neon Boots DJ Request App" document above and am asking a query about/based on this code below.
-Instructions to follow:
-  * Don't output/edit the document if the query is Direct/Simple. For example, if the query asks for a simple explanation, output a direct answer.
-  * Make sure to **edit** the document if the query shows the intent of editing the document, in which case output the entire edited document, **not just that section or the edits**.
-    * Don't output the same document/empty document and say that you have edited it.
-    * Don't change unrelated code in the document.
-  * Don't output  and  in your final response.
-  * Any references like "this" or "selected code" refers to the code between  and  tags.
-  * Just acknowledge my request in the introduction.
-  * Make sure to refer to the document as "Canvas" in your response.
+    if (firebaseStatus === 'error') {
+        return <div className="bg-gray-900 min-h-screen flex items-center justify-center text-red-500 text-xl p-8 text-center">Error: Could not start the app. Please ensure Firebase configuration is correct and you are online. Check the console for more details.</div>;
+    }
 
-I'm getting the following errors when I run the code:
-
-[12:56:04 AM] [GLOBAL] Script error. (at https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js:0:0)
-
-[12:56:04 AM] [GLOBAL] Script error. (at https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js:0:0)
-
-[12:56:04 AM] [GLOBAL] Script error. (at https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js:0:0)
-
-Can you fix th
+    return (
+        <div className="bg-gray-900 text-white min-h-screen font-sans" style={{ background: 'radial-gradient(circle, rgba(31,25,48,1) 0%, rgba(17,14,28,1) 100%)' }}>
+            <div className="container mx-auto p-4 md:p-8">
+                {renderView()}
+                {view === 'main' && (
+                    <footer className="text-center mt-8">
+                        <button onClick={() => setView('dj-login')} className="text-gray-400 hover:text-white transition-colors flex items-center justify-center gap-2 mx-auto"><DjIcon /> DJ Login</button>
+                    </footer>
+                )}
+                {showThanksModal && (
+                    <Modal title="Request Submitted!" onClose={() => setShowThanksModal(false)}>
+                        <p className="mb-4">Thank you for submitting a request. The DJ will do their best to accommodate. Submitting does not guarantee anything.</p>
+                        <p className="font-bold text-orange-300">Priority is given to dances that have been taught at Neon Boots.</p>
+                        <TipJar djSettings={djSettings} />
+                    </Modal>
+                )}
+            </div>
+            <style>{`
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
+                body { font-family: 'Inter', sans-serif; }
+                @keyframes fade-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+                .animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
+            `}</style>
+        </div>
+    );
+}
