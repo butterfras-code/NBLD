@@ -5,11 +5,13 @@ import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc
 
 // --- Helper Components & Data ---
 
-const Icon = ({ path, className = "w-6 h-6" }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
-        <path d={path} />
-    </svg>
-);
+function Icon({ path, className = "w-6 h-6" }) {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+            <path d={path} />
+        </svg>
+    );
+}
 
 const MusicNoteIcon = () => <Icon path="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />;
 const QueueIcon = () => <Icon path="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />;
@@ -42,56 +44,45 @@ const COMMON_EVENTS = [
     'Closing Time'
 ];
 
-// --- Firebase Setup ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-dj-app';
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-
-const publicPath = (collectionName) => `artifacts/${appId}/public/data/${collectionName}`;
-const requestsCollection = collection(db, publicPath('requests'));
-const queueCollection = collection(db, publicPath('queue'));
-const settingsDoc = (djName) => doc(db, publicPath('dj_settings'), djName);
-const sampleDataDoc = doc(db, publicPath('sample_data_flag'), 'populated');
-
 // --- Sample Data Population ---
-const populateSampleData = async () => {
-    const flagDoc = await getDoc(sampleDataDoc);
-    if (flagDoc.exists()) return;
+const populateSampleData = async (db, collections) => {
+    try {
+        const flagDoc = await getDoc(collections.sampleDataFlag);
+        if (flagDoc.exists()) return;
 
-    console.log("Populating sample data for the first time...");
-    const batch = writeBatch(db);
+        console.log("Populating sample data for the first time...");
+        const batch = writeBatch(db);
 
-    const sampleRequests = [
-        { dance: 'Two Step', song: 'Neon Moon', artist: 'Brooks & Dunn', customerName: 'Alice', status: 'pending', createdAt: new Date(), spotify: '' },
-        { dance: 'Waltz', song: 'Tennessee Whiskey', artist: 'Chris Stapleton', customerName: 'Bob', status: 'pending', createdAt: new Date(), spotify: '' },
-        { dance: 'Line Dance', song: 'Good Time', artist: 'Alan Jackson', customerName: 'Charlie', status: 'pending', createdAt: new Date(), spotify: '' },
-    ];
+        const sampleRequests = [
+            { dance: 'Two Step', song: 'Neon Moon', artist: 'Brooks & Dunn', customerName: 'Alice', status: 'pending', createdAt: new Date(), spotify: '' },
+            { dance: 'Waltz', song: 'Tennessee Whiskey', artist: 'Chris Stapleton', customerName: 'Bob', status: 'pending', createdAt: new Date(), spotify: '' },
+            { dance: 'Line Dance', song: 'Good Time', artist: 'Alan Jackson', customerName: 'Charlie', status: 'pending', createdAt: new Date(), spotify: '' },
+        ];
 
-    const sampleQueue = [
-        { dance: 'West Coast Swing', song: 'Gives Me Shivers', artist: 'Ed Sheeran', customerName: 'DJ', status: 'queued', order: 0, queuedAt: new Date(), isEvent: false, spotify: '' },
-        { dance: 'Partner Dance Break', song: 'Couples Skate!', artist: 'Event', isEvent: true, order: 1, queuedAt: new Date() },
-        { dance: 'Country Swing', song: 'Wagon Wheel', artist: 'Darius Rucker', customerName: 'DJ', status: 'queued', order: 2, queuedAt: new Date(), isEvent: false, spotify: '' },
-    ];
+        const sampleQueue = [
+            { dance: 'West Coast Swing', song: 'Gives Me Shivers', artist: 'Ed Sheeran', customerName: 'DJ', status: 'queued', order: 0, queuedAt: new Date(), isEvent: false, spotify: '' },
+            { dance: 'Partner Dance Break', song: 'Couples Skate!', artist: 'Event', isEvent: true, order: 1, queuedAt: new Date() },
+            { dance: 'Country Swing', song: 'Wagon Wheel', artist: 'Darius Rucker', customerName: 'DJ', status: 'queued', order: 2, queuedAt: new Date(), isEvent: false, spotify: '' },
+        ];
 
-    sampleRequests.forEach(req => {
-        const docRef = doc(collection(db, publicPath('requests')));
-        batch.set(docRef, req);
-    });
+        sampleRequests.forEach(req => {
+            const docRef = doc(collections.requests);
+            batch.set(docRef, req);
+        });
 
-    sampleQueue.forEach(item => {
-        const docRef = doc(collection(db, publicPath('queue')));
-        batch.set(docRef, item);
-    });
+        sampleQueue.forEach(item => {
+            const docRef = doc(collections.queue);
+            batch.set(docRef, item);
+        });
 
-    batch.set(sampleDataDoc, { populated: true });
+        batch.set(collections.sampleDataFlag, { populated: true });
 
-    await batch.commit();
-    console.log("Sample data populated.");
+        await batch.commit();
+        console.log("Sample data populated.");
+    } catch (error) {
+        console.error("Error populating sample data:", error);
+    }
 };
-
 
 // --- App Components ---
 
@@ -131,7 +122,7 @@ function DJLogin({ onLogin }) {
     );
 }
 
-function SongRequestForm({ onSubmitted }) {
+function SongRequestForm({ onSubmitted, firebase }) {
     const [dance, setDance] = useState('');
     const [song, setSong] = useState('');
     const [artist, setArtist] = useState('');
@@ -158,7 +149,7 @@ function SongRequestForm({ onSubmitted }) {
         if (!dance || !song || !artist || !name) return;
         setIsSubmitting(true);
         try {
-            await addDoc(requestsCollection, { dance, song, artist, spotify, customerName: name, status: 'pending', createdAt: new Date() });
+            await addDoc(firebase.collections.requests, { dance, song, artist, spotify, customerName: name, status: 'pending', createdAt: new Date() });
             setDance(''); setSong(''); setArtist(''); setSpotify(''); setName('');
             onSubmitted();
         } catch (error) {
@@ -223,6 +214,25 @@ function EditSongModal({ song, onClose, onSave }) {
     );
 }
 
+function EventNotesModal({ eventName, onClose, onSave }) {
+    const [notes, setNotes] = useState('');
+
+    const handleSave = () => {
+        onSave(eventName, notes);
+        onClose();
+    };
+
+    return (
+        <Modal title={eventName} onClose={onClose}>
+            <div className="space-y-4 text-left">
+                <label className="block text-orange-400 text-sm font-bold mb-2" htmlFor="event-notes">Optional Notes</label>
+                <input id="event-notes" type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g., Name of the dance being taught" className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+            </div>
+            <button onClick={handleSave} className="mt-6 w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Add to Queue</button>
+        </Modal>
+    );
+}
+
 
 function TipJar({ djSettings }) {
     const venmoLink = djSettings.venmo ? `https://venmo.com/u/${djSettings.venmo}` : null;
@@ -276,7 +286,7 @@ function DanceQueue({ queue }) {
     );
 }
 
-function DJConsole({ djName, onLogout }) {
+function DJConsole({ djName, onLogout, firebase }) {
     const [requests, setRequests] = useState([]);
     const [queue, setQueue] = useState([]);
     const [venmo, setVenmo] = useState('');
@@ -284,18 +294,19 @@ function DJConsole({ djName, onLogout }) {
     const [isLoading, setIsLoading] = useState(true);
     const [editingSong, setEditingSong] = useState(null);
     const [showTipSaveSuccess, setShowTipSaveSuccess] = useState(false);
+    const [eventToAdd, setEventToAdd] = useState(null);
     
     const dragItem = useRef(null);
     const dragOverItem = useRef(null);
 
     useEffect(() => {
-        const qRequests = query(collection(db, publicPath('requests')), orderBy("createdAt", "desc"));
+        const qRequests = query(firebase.collections.requests, orderBy("createdAt", "desc"));
         const unsubscribeRequests = onSnapshot(qRequests, (snapshot) => {
             const newRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(r => r.status === 'pending');
             setRequests(newRequests);
         }, (error) => console.error("Requests snapshot error:", error));
 
-        const qQueue = query(collection(db, publicPath('queue')), orderBy("order"));
+        const qQueue = query(firebase.collections.queue, orderBy("order"));
         const unsubscribeQueue = onSnapshot(qQueue, (snapshot) => {
             const newQueue = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setQueue(newQueue);
@@ -304,7 +315,7 @@ function DJConsole({ djName, onLogout }) {
         const fetchSettings = async () => {
             setIsLoading(true);
             try {
-                const docRef = settingsDoc(djName.toLowerCase());
+                const docRef = firebase.docs.settings(djName.toLowerCase());
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
                     setVenmo(docSnap.data().venmoUsername || '');
@@ -319,11 +330,11 @@ function DJConsole({ djName, onLogout }) {
         fetchSettings();
 
         return () => { unsubscribeRequests(); unsubscribeQueue(); };
-    }, [djName]);
+    }, [djName, firebase]);
 
     const handleSaveSettings = async () => {
         try {
-            await setDoc(settingsDoc(djName.toLowerCase()), { venmoUsername: venmo, cashappUsername: cashapp }, { merge: true });
+            await setDoc(firebase.docs.settings(djName.toLowerCase()), { venmoUsername: venmo, cashappUsername: cashapp }, { merge: true });
             setShowTipSaveSuccess(true);
             setTimeout(() => setShowTipSaveSuccess(false), 3000);
         } catch (error) {
@@ -334,7 +345,7 @@ function DJConsole({ djName, onLogout }) {
     const handleAddToQueue = async (itemData, position) => {
         let newOrder;
         if (position === 'next') {
-            const firstItemOrder = queue.length > 0 ? queue[0].order : 1;
+            const firstItemOrder = queue.length > 0 ? queue[0].order : -1;
             newOrder = firstItemOrder - 1;
         } else { // 'last'
             const lastItemOrder = queue.length > 0 ? queue[queue.length - 1].order : 0;
@@ -343,30 +354,29 @@ function DJConsole({ djName, onLogout }) {
         
         try {
             const { id, ...data } = itemData;
-            await addDoc(queueCollection, { ...data, status: 'queued', queuedAt: new Date(), order: newOrder });
+            await addDoc(firebase.collections.queue, { ...data, status: 'queued', queuedAt: new Date(), order: newOrder });
             if (!itemData.isEvent) {
-                await updateDoc(doc(db, publicPath('requests'), id), { status: 'queued' });
+                await updateDoc(doc(firebase.db, `artifacts/${firebase.appId}/public/data/requests`, id), { status: 'queued' });
             }
         } catch (error) {
             console.error("Error adding to queue:", error);
         }
     };
 
-    const handleAddEventToQueue = (eventName) => {
-        const notes = prompt(`Enter optional notes for "${eventName}":`);
-        if (notes === null) return; // User cancelled prompt
+    const handleSaveEventToQueue = (eventName, notes) => {
         const eventData = {
             dance: eventName,
-            song: notes || '', // Notes go into the song field
+            song: notes || '',
             artist: 'Event',
             isEvent: true,
         };
         handleAddToQueue(eventData, 'last');
+        setEventToAdd(null);
     };
 
     const handleDeleteRequest = async (id) => {
         try {
-            await deleteDoc(doc(db, publicPath('requests'), id));
+            await deleteDoc(doc(firebase.db, `artifacts/${firebase.appId}/public/data/requests`, id));
         } catch (error) {
             console.error("Error deleting request:", error);
         }
@@ -374,7 +384,7 @@ function DJConsole({ djName, onLogout }) {
 
     const handleUpdateSong = async (id, data) => {
         try {
-            await updateDoc(doc(db, publicPath('queue'), id), data);
+            await updateDoc(doc(firebase.db, `artifacts/${firebase.appId}/public/data/queue`, id), data);
         } catch (error) {
             console.error("Error updating song:", error);
         }
@@ -382,7 +392,7 @@ function DJConsole({ djName, onLogout }) {
 
     const handleDeleteFromQueue = async (id) => {
         try {
-            await deleteDoc(doc(db, publicPath('queue'), id));
+            await deleteDoc(doc(firebase.db, `artifacts/${firebase.appId}/public/data/queue`, id));
         } catch (error) {
             console.error("Error deleting from queue:", error);
         }
@@ -394,9 +404,9 @@ function DJConsole({ djName, onLogout }) {
         if (otherItemIndex < 0 || otherItemIndex >= queue.length) return;
         const otherItem = queue[otherItemIndex];
 
-        const batch = writeBatch(db);
-        const itemRef = doc(db, publicPath('queue'), item.id);
-        const otherItemRef = doc(db, publicPath('queue'), otherItem.id);
+        const batch = writeBatch(firebase.db);
+        const itemRef = doc(firebase.collections.queue, item.id);
+        const otherItemRef = doc(firebase.collections.queue, otherItem.id);
         
         batch.update(itemRef, { order: otherItem.order });
         batch.update(otherItemRef, { order: item.order });
@@ -407,17 +417,16 @@ function DJConsole({ djName, onLogout }) {
     const handleDragSort = async () => {
         if (dragItem.current === null || dragOverItem.current === null) return;
         const draggedItem = queue[dragItem.current];
-        const targetItem = queue[dragOverItem.current];
-
-        if (draggedItem.id === targetItem.id) return;
+        
+        if (!draggedItem || dragItem.current === dragOverItem.current) return;
 
         const newQueue = [...queue];
         newQueue.splice(dragItem.current, 1);
         newQueue.splice(dragOverItem.current, 0, draggedItem);
         
-        const batch = writeBatch(db);
+        const batch = writeBatch(firebase.db);
         newQueue.forEach((item, index) => {
-            const itemRef = doc(db, publicPath('queue'), item.id);
+            const itemRef = doc(firebase.collections.queue, item.id);
             batch.update(itemRef, { order: index });
         });
         await batch.commit();
@@ -434,6 +443,7 @@ function DJConsole({ djName, onLogout }) {
     return (
         <div className="p-4 md:p-8 min-h-screen">
             {editingSong && <EditSongModal song={editingSong} onClose={() => setEditingSong(null)} onSave={handleUpdateSong} />}
+            {eventToAdd && <EventNotesModal eventName={eventToAdd} onClose={() => setEventToAdd(null)} onSave={handleSaveEventToQueue} />}
             <header className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl md:text-4xl font-bold text-white">DJ Console</h1>
                 <div>
@@ -448,7 +458,7 @@ function DJConsole({ djName, onLogout }) {
                         <h2 className="text-2xl font-bold text-white mb-4">Common Events</h2>
                         <div className="grid grid-cols-2 gap-2">
                             {COMMON_EVENTS.map(event => (
-                                <button key={event} onClick={() => handleAddEventToQueue(event)} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold py-2 px-2 rounded transition-colors">{event}</button>
+                                <button key={event} onClick={() => setEventToAdd(event)} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold py-2 px-2 rounded transition-colors">{event}</button>
                             ))}
                         </div>
                     </div>
@@ -522,6 +532,7 @@ function DJConsole({ djName, onLogout }) {
 }
 
 export default function App() {
+    const [firebase, setFirebase] = useState(null);
     const [view, setView] = useState('main');
     const [djName, setDjName] = useState(null);
     const [showThanksModal, setShowThanksModal] = useState(false);
@@ -530,40 +541,80 @@ export default function App() {
     const [isAuthReady, setIsAuthReady] = useState(false);
 
     useEffect(() => {
+        try {
+            const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : {};
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-dj-app';
+
+            if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
+                throw new Error("Firebase config is missing or empty.");
+            }
+            
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+            
+            const publicPath = (collectionName) => `artifacts/${appId}/public/data/${collectionName}`;
+
+            setFirebase({
+                app,
+                auth,
+                db,
+                appId,
+                collections: {
+                    requests: collection(db, publicPath('requests')),
+                    queue: collection(db, publicPath('queue')),
+                    settings: collection(db, publicPath('dj_settings')),
+                    sampleDataFlag: doc(db, publicPath('sample_data_flag'), 'populated')
+                },
+                docs: {
+                    settings: (djName) => doc(db, publicPath('dj_settings'), djName),
+                }
+            });
+        } catch (e) {
+            console.error("FATAL: Firebase initialization failed.", e);
+            setFirebase({ error: e });
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!firebase || firebase.error) return;
+
         const signInUser = async () => {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
+                    await signInWithCustomToken(firebase.auth, __initial_auth_token);
                 } else {
-                    await signInAnonymously(auth);
+                    await signInAnonymously(firebase.auth);
                 }
             } catch (error) {
                 console.error("Firebase sign-in failed:", error);
             }
         };
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+
+        const unsubscribe = onAuthStateChanged(firebase.auth, (user) => {
             if (user) {
                 setIsAuthReady(true);
             }
         });
+        
         signInUser();
         return () => unsubscribe();
-    }, []);
+    }, [firebase]);
 
     useEffect(() => {
-        if (!isAuthReady) return;
+        if (!isAuthReady || !firebase || firebase.error) return;
 
-        populateSampleData();
+        populateSampleData(firebase.db, firebase.collections);
 
-        const qQueue = query(collection(db, publicPath('queue')), orderBy("order"));
+        const qQueue = query(firebase.collections.queue, orderBy("order"));
         const unsubscribeQueue = onSnapshot(qQueue, (snapshot) => {
             setQueue(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Queue snapshot listener error:", error));
         
         const fetchAllSettings = async () => {
             try {
-                const angieSnap = await getDoc(settingsDoc('angie'));
-                const justinSnap = await getDoc(settingsDoc('justin'));
+                const angieSnap = await getDoc(firebase.docs.settings('angie'));
+                const justinSnap = await getDoc(firebase.docs.settings('justin'));
                 const angieSettings = angieSnap.data();
                 const justinSettings = justinSnap.data();
                 setDjSettings({
@@ -576,12 +627,12 @@ export default function App() {
         };
         
         fetchAllSettings();
-        const settingsListener = onSnapshot(collection(db, publicPath('dj_settings')), () => {
+        const settingsListener = onSnapshot(firebase.collections.settings, () => {
             fetchAllSettings();
         }, (error) => console.error("Settings snapshot listener error:", error));
 
         return () => { unsubscribeQueue(); settingsListener(); };
-    }, [isAuthReady]);
+    }, [isAuthReady, firebase]);
 
     const handleLogin = (name) => { setDjName(name); setView('dj-console'); };
     const handleLogout = () => { setDjName(null); setView('main'); };
@@ -589,9 +640,9 @@ export default function App() {
 
     const renderView = () => {
         switch (view) {
-            case 'request': return <SongRequestForm onSubmitted={handleRequestSubmitted} />;
+            case 'request': return <SongRequestForm onSubmitted={handleRequestSubmitted} firebase={firebase} />;
             case 'dj-login': return <DJLogin onLogin={handleLogin} />;
-            case 'dj-console': return <DJConsole djName={djName} onLogout={handleLogout} />;
+            case 'dj-console': return <DJConsole djName={djName} onLogout={handleLogout} firebase={firebase} />;
             default: return (
                 <>
                     <div className="text-center mb-8">
@@ -607,6 +658,14 @@ export default function App() {
             );
         }
     };
+
+    if (!firebase) {
+        return <div className="bg-gray-900 min-h-screen flex items-center justify-center text-white text-xl">Initializing App...</div>;
+    }
+
+    if (firebase.error) {
+        return <div className="bg-gray-900 min-h-screen flex items-center justify-center text-red-500 text-xl p-8 text-center">Error: Could not start the app. Please ensure Firebase configuration is correct. Check the console for more details.</div>;
+    }
 
     return (
         <div className="bg-gray-900 text-white min-h-screen font-sans" style={{ background: 'radial-gradient(circle, rgba(31,25,48,1) 0%, rgba(17,14,28,1) 100%)' }}>
