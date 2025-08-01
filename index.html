@@ -6,7 +6,7 @@
     <title>Neon Boots DJ Request App</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts for the 'Brush Script MT' style -->
+    <!-- Google Fonts for the 'Teko' style -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Teko:wght@700&display=swap" rel="stylesheet">
@@ -14,7 +14,7 @@
         /* Custom font for the header to approximate the neon sign look */
         .font-neon {
             font-family: 'Teko', sans-serif;
-            text-shadow: 0 0 5px #ff00ff, 0 0 10px #ff00ff, 0 0 20px #ff00ff, 0 0 40px #00ffff, 0 0 80px #00ffff;
+            text-shadow: 0 0 4px #ff00ff, 0 0 8px #ff00ff, 0 0 12px #00ffff;
         }
         .neon-checkmark {
             filter: drop-shadow(0 0 3px #39ff14) drop-shadow(0 0 5px #39ff14);
@@ -27,6 +27,19 @@
         }
         .rating-button.selected {
             transform: scale(1.25);
+        }
+        /* Simple spinner for loading states */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -48,6 +61,12 @@
         // Since we're not using a bundler, we get React functions from the global 'React' object
         const { useState, useEffect, useRef, useCallback } = React;
         
+        // --- Gemini API Configuration ---
+        // IMPORTANT: Replace with your actual Gemini API key. 
+        // For production, it's highly recommended to handle this key securely on a server-side backend 
+        // to avoid exposing it in the client-side code.
+        const GEMINI_API_KEY = ""; // <--- ADD YOUR GEMINI API KEY HERE
+
         // --- Firebase Configuration ---
         const firebaseConfig = {
             apiKey: "AIzaSyBKmzMtCnEWIFEiq6WK6f1E4JTCkC2tnt0",
@@ -68,6 +87,40 @@
         } catch (error) {
             console.error("Firebase initialization error. Please provide your Firebase config.", error);
         }
+
+        // --- Helper function to call Gemini API ---
+        const callGeminiAPI = async (prompt) => {
+            if (!GEMINI_API_KEY) {
+                console.error("Gemini API key is missing.");
+                return "Error: Gemini API key not configured. Please add it to the script.";
+            }
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+            
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.json();
+                    console.error("Gemini API Error:", errorBody);
+                    return `Error: ${errorBody.error.message}`;
+                }
+
+                const data = await response.json();
+                if (data.candidates && data.candidates.length > 0) {
+                    return data.candidates[0].content.parts[0].text;
+                }
+                return "No response from AI.";
+
+            } catch (error) {
+                console.error("Error calling Gemini API:", error);
+                return "An error occurred while contacting the AI.";
+            }
+        };
+
 
         const lineDancesList = [
             { name: 'Tush Push', song: 'Tush Push', artist: 'Trisha Yearwood' },
@@ -90,13 +143,20 @@
         // --- Helper Functions for Firestore ---
         const seedInitialData = async () => {
             if (!db) return;
-            const configDocSnap = await db.collection('config').doc('seeded').get();
+            const configDocSnap = await db.collection('config').doc('seeded_v4').get();
             if (configDocSnap.exists) {
                 return; // Already seeded
             }
 
-            console.log("Empty database detected. Seeding initial data...");
+            console.log("Database not seeded or needs update. Seeding initial data...");
             const batch = db.batch();
+            
+            const djsCollection = db.collection('djs');
+            const justinRef = djsCollection.doc('justin');
+            const angieRef = djsCollection.doc('angie');
+
+            batch.set(justinRef, { name: 'Justin', password: 'puppies', role: 'admin', venmo: 'justin-venmo', cashapp: 'justincash' });
+            batch.set(angieRef, { name: 'Angie', password: 'puppies', role: 'dj', venmo: 'angie-venmo', cashapp: 'angiecash' });
 
             const sampleRequests = [
                 { danceName: 'Electric Slide', songName: 'Electric Boogie', artist: 'Marcia Griffiths', customerName: 'Brenda', spotifyLink: '', createdAt: new Date() },
@@ -117,7 +177,7 @@
                 batch.set(docRef, item);
             });
 
-            batch.set(db.collection('config').doc('seeded'), { done: true });
+            batch.set(db.collection('config').doc('seeded_v4'), { done: true });
 
             await batch.commit();
             console.log("Initial data seeded.");
@@ -150,7 +210,198 @@
                 </Modal>
             );
         };
+        
+        const GeminiAnnouncementModal = ({ show, onClose }) => {
+            const [topic, setTopic] = useState('');
+            const [announcement, setAnnouncement] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
 
+            if (!show) return null;
+
+            const handleGenerate = async () => {
+                if (!topic) return;
+                setIsLoading(true);
+                setAnnouncement('');
+                const prompt = `You are a fun, high-energy country western DJ at a club called Neon Boots. Write a short, fun announcement for the following topic: "${topic}". Keep it under 30 seconds to read.`;
+                const result = await callGeminiAPI(prompt);
+                setAnnouncement(result);
+                setIsLoading(false);
+            };
+            
+            const handleCopyToClipboard = () => {
+                navigator.clipboard.writeText(announcement);
+            };
+
+            return (
+                <Modal show={show} onClose={onClose} title="✨ AI Announcement Generator">
+                    <p className="text-gray-300 mb-4">Enter a topic and let the AI craft a fun announcement!</p>
+                    <input 
+                        type="text" 
+                        value={topic} 
+                        onChange={(e) => setTopic(e.target.value)} 
+                        className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 mb-4"
+                        placeholder="e.g., Last Call, Birthday for Sarah"
+                    />
+                    <button onClick={handleGenerate} disabled={isLoading || !topic} className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg w-full disabled:opacity-50 flex justify-center items-center">
+                        {isLoading ? <div className="loader"></div> : 'Generate Announcement'}
+                    </button>
+                    
+                    {announcement && (
+                        <div className="mt-6 bg-gray-900 p-4 rounded-lg">
+                            <h4 className="text-lg font-semibold text-cyan-300 mb-2">Generated Announcement:</h4>
+                            <p className="text-gray-200 whitespace-pre-wrap">{announcement}</p>
+                            <button onClick={handleCopyToClipboard} className="text-xs bg-gray-600 hover:bg-gray-500 text-white font-bold py-1 px-2 rounded mt-3">Copy Text</button>
+                        </div>
+                    )}
+                </Modal>
+            );
+        };
+
+        const RequestForm = ({ onClose, tippingInfo, formType }) => {
+            const [danceName, setDanceName] = useState('');
+            const [songName, setSongName] = useState('');
+            const [artist, setArtist] = useState('');
+            const [spotifyLink, setSpotifyLink] = useState('');
+            const [stepSheetUrl, setStepSheetUrl] = useState('');
+            const [customerName, setCustomerName] = useState('');
+            const [showThanksModal, setShowThanksModal] = useState(false);
+            const [songSuggestions, setSongSuggestions] = useState([]);
+            const [isSuggesting, setIsSuggesting] = useState(false);
+
+            const isLineDance = formType === 'line';
+            const danceList = isLineDance ? lineDancesList : partnerDancesList;
+            const quickSelectLabel = isLineDance ? "Quick Select a Line Dance" : "Quick Select a Dance Style";
+
+            const handleDanceSelect = (e) => {
+                const selectedDanceName = e.target.value;
+                setSongSuggestions([]);
+                const dance = danceList.find(d => d.name === selectedDanceName);
+                if (dance) {
+                    setDanceName(dance.name);
+                    if (isLineDance) {
+                        setSongName(dance.song || '');
+                        setArtist(dance.artist || '');
+                    } else {
+                        setSongName('');
+                        setArtist('');
+                    }
+                } else {
+                    setDanceName('');
+                    setSongName('');
+                    setArtist('');
+                }
+            };
+
+            const handleSuggestSongs = async () => {
+                if (!danceName) return;
+                setIsSuggesting(true);
+                setSongSuggestions([]);
+                const prompt = `Suggest 3 popular country songs for a '${danceName}' dance. Provide just the song title and artist, each on a new line, like 'Song Title - Artist'. Do not add numbers or bullets.`;
+                const result = await callGeminiAPI(prompt);
+                const suggestions = result.split('\n').filter(s => s.trim() !== '');
+                setSongSuggestions(suggestions);
+                setIsSuggesting(false);
+            };
+            
+            const handleSelectSuggestion = (suggestion) => {
+                const parts = suggestion.split(' - ');
+                if (parts.length === 2) {
+                    setSongName(parts[0].trim());
+                    setArtist(parts[1].trim());
+                }
+                setSongSuggestions([]);
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!customerName || !db) return;
+                try {
+                    const requestData = { 
+                        danceName, 
+                        songName, 
+                        artist, 
+                        spotifyLink, 
+                        customerName, 
+                        createdAt: new Date() 
+                    };
+                    if (isLineDance) {
+                        requestData.stepSheetUrl = stepSheetUrl;
+                    }
+                    await db.collection('requests').add(requestData);
+                    setShowThanksModal(true);
+                } catch (error) {
+                    console.error("Error adding request: ", error);
+                }
+            };
+
+            if (showThanksModal) {
+                return (
+                    <div className="text-center">
+                        <h2 className="text-2xl font-bold text-pink-400 mb-4">Thank You!</h2>
+                        <p className="text-gray-200 mb-4">Your request has been sent to the DJ.</p>
+                        <TippingSection tippingInfo={tippingInfo} />
+                        <button onClick={() => { setShowThanksModal(false); onClose(); }} className="mt-4 bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg w-full">Close</button>
+                    </div>
+                );
+            }
+
+            return (
+                <form onSubmit={handleSubmit}>
+                    <p className="text-gray-300 mb-4 text-center">Enter as much as you know, the more the better!</p>
+                    <div className="mb-4">
+                        <label htmlFor="dance-select" className="block text-cyan-300 text-sm font-bold mb-2">{quickSelectLabel}</label>
+                        <select id="dance-select" onChange={handleDanceSelect} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
+                            <option value="">-- Select a Dance --</option>
+                            {danceList.map(dance => <option key={dance.name} value={dance.name}>{dance.name}</option>)}
+                        </select>
+                    </div>
+                    <p className="text-center text-gray-400 my-2">OR</p>
+                    <div className="mb-4">
+                        <label htmlFor="dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style</label>
+                        <input type="text" id="dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song Name</label>
+                        <div className="flex items-center gap-2">
+                           <input type="text" id="song-name" value={songName} onChange={e => setSongName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                           {!isLineDance && (
+                                <button type="button" onClick={handleSuggestSongs} disabled={!danceName || isSuggesting} className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-3 rounded-lg disabled:opacity-50 text-sm whitespace-nowrap">
+                                    {isSuggesting ? '...' : '✨ Suggest'}
+                                </button>
+                           )}
+                        </div>
+                         {songSuggestions.length > 0 && (
+                            <div className="mt-2 bg-gray-700 border border-gray-600 rounded-lg p-2">
+                                <p className="text-xs text-gray-300 mb-2">Tap to select:</p>
+                                {songSuggestions.map((s, i) => (
+                                    <button type="button" key={i} onClick={() => handleSelectSuggestion(s)} className="block w-full text-left p-1 text-cyan-300 hover:bg-gray-600 rounded text-sm">{s}</button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist</label>
+                        <input type="text" id="artist-name" value={artist} onChange={e => setArtist(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    {isLineDance && (
+                        <div className="mb-4">
+                            <label htmlFor="step-sheet-url" className="block text-cyan-300 text-sm font-bold mb-2">Step Sheet URL (Optional)</label>
+                            <input type="url" id="step-sheet-url" value={stepSheetUrl} onChange={e => setStepSheetUrl(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                    )}
+                    <div className="mb-4">
+                        <label htmlFor="spotify-link" className="block text-cyan-300 text-sm font-bold mb-2">Spotify Link (Optional)</label>
+                        <input type="url" id="spotify-link" value={spotifyLink} onChange={e => setSpotifyLink(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="customer-name" className="block text-cyan-300 text-sm font-bold mb-2">Your Name*</label>
+                        <input type="text" id="customer-name" value={customerName} onChange={e => setCustomerName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <button type="submit" className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg w-full">Submit Request</button>
+                </form>
+            );
+        };
+        
         const PromptModal = ({ show, onClose, onConfirm, title, message }) => {
             const [inputValue, setInputValue] = useState('');
             if (!show) return null;
@@ -204,7 +455,7 @@
         };
 
         const TippingSection = ({ tippingInfo }) => {
-            if (!tippingInfo?.venmo && !tippingInfo?.cashapp) {
+            if (!tippingInfo || (!tippingInfo.venmo && !tippingInfo.cashapp)) {
                 return null;
             }
             return (
@@ -216,103 +467,16 @@
             );
         };
 
-        const RequestForm = ({ onClose, tippingInfo, formType }) => {
-            const [danceName, setDanceName] = useState('');
-            const [songName, setSongName] = useState('');
-            const [artist, setArtist] = useState('');
-            const [spotifyLink, setSpotifyLink] = useState('');
-            const [customerName, setCustomerName] = useState('');
-            const [showThanksModal, setShowThanksModal] = useState(false);
-
-            const isLineDance = formType === 'line';
-            const danceList = isLineDance ? lineDancesList : partnerDancesList;
-            const quickSelectLabel = isLineDance ? "Quick Select a Line Dance" : "Quick Select a Dance Style";
-
-            const handleDanceSelect = (e) => {
-                const selectedDanceName = e.target.value;
-                const dance = danceList.find(d => d.name === selectedDanceName);
-                if (dance) {
-                    setDanceName(dance.name);
-                    if (isLineDance) {
-                        setSongName(dance.song || '');
-                        setArtist(dance.artist || '');
-                    } else {
-                        setSongName('');
-                        setArtist('');
-                    }
-                } else {
-                    setDanceName('');
-                    setSongName('');
-                    setArtist('');
-                }
-            };
-
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                if (!danceName || !songName || !artist || !customerName || !db) return;
-                try {
-                    await db.collection('requests').add({ danceName, songName, artist, spotifyLink, customerName, createdAt: new Date() });
-                    setShowThanksModal(true);
-                } catch (error) {
-                    console.error("Error adding request: ", error);
-                }
-            };
-
-            if (showThanksModal) {
-                return (
-                    <div className="text-center">
-                        <h2 className="text-2xl font-bold text-pink-400 mb-4">Thank You!</h2>
-                        <p className="text-gray-200 mb-4">Your request has been sent to the DJ.</p>
-                        <TippingSection tippingInfo={tippingInfo} />
-                        <button onClick={() => { setShowThanksModal(false); onClose(); }} className="mt-4 bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg w-full">Close</button>
-                    </div>
-                );
-            }
-
-            return (
-                <form onSubmit={handleSubmit}>
-                    <div className="mb-4">
-                        <label htmlFor="dance-select" className="block text-cyan-300 text-sm font-bold mb-2">{quickSelectLabel}</label>
-                        <select id="dance-select" onChange={handleDanceSelect} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
-                            <option value="">-- Select a Dance --</option>
-                            {danceList.map(dance => <option key={dance.name} value={dance.name}>{dance.name}</option>)}
-                        </select>
-                    </div>
-                    <p className="text-center text-gray-400 my-2">OR</p>
-                    <div className="mb-4">
-                        <label htmlFor="dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style*</label>
-                        <input type="text" id="dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-                    </div>
-                    <div className="mb-4">
-                        <label htmlFor="song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song Name*</label>
-                        <input type="text" id="song-name" value={songName} onChange={e => setSongName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-                    </div>
-                    <div className="mb-4">
-                        <label htmlFor="artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist*</label>
-                        <input type="text" id="artist-name" value={artist} onChange={e => setArtist(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-                    </div>
-                    <div className="mb-4">
-                        <label htmlFor="spotify-link" className="block text-cyan-300 text-sm font-bold mb-2">Spotify Link (Optional)</label>
-                        <input type="url" id="spotify-link" value={spotifyLink} onChange={e => setSpotifyLink(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-                    </div>
-                    <div className="mb-4">
-                        <label htmlFor="customer-name" className="block text-cyan-300 text-sm font-bold mb-2">Your Name*</label>
-                        <input type="text" id="customer-name" value={customerName} onChange={e => setCustomerName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-                    </div>
-                    <button type="submit" className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg w-full">Submit Request</button>
-                </form>
-            );
-        };
-
-        const DJLogin = ({ onLogin }) => {
+        const DJLogin = ({ onLogin, djs }) => {
             const [djName, setDjName] = useState('');
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
 
             const handleLogin = (e) => {
                 e.preventDefault();
-                if ((djName === 'Angie' || djName === 'Justin') && password === 'puppies') {
-                    onLogin();
+                const dj = djs.find(d => d.name === djName);
+                if (dj && dj.password === password) {
+                    onLogin(dj);
                 } else {
                     setError('Invalid DJ Name or Password.');
                 }
@@ -325,8 +489,7 @@
                         <label htmlFor="dj-name" className="block text-cyan-300 text-sm font-bold mb-2">DJ Name</label>
                         <select id="dj-name" value={djName} onChange={e => setDjName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
                             <option value="">Select DJ</option>
-                            <option value="Angie">Angie</option>
-                            <option value="Justin">Justin</option>
+                            {djs.map(dj => <option key={dj.id} value={dj.name}>{dj.name}</option>)}
                         </select>
                     </div>
                     <div className="mb-4">
@@ -338,7 +501,7 @@
             );
         };
 
-        const QueueList = ({ queue, isDjView, onReorder, onEdit, onDelete, onMove, onMarkAsPlayed, title, isUpcomingQueue, onVote, votedSongs = [] }) => {
+        const QueueList = ({ queue, isDjView, onReorder, onEdit, onDelete, onMove, onMarkAsPlayed, title, isUpcomingQueue, onVote, votedSongs = [], onDrop, onDragOver }) => {
             const dragItem = useRef(null);
             const dragOverItem = useRef(null);
 
@@ -355,12 +518,12 @@
                 dragOverItem.current = null;
             };
             
-            if (queue.length === 0) {
+            if (queue.length === 0 && !isDjView) {
                 return <div className="text-center text-gray-400 py-8">The {title.toLowerCase()} is currently empty.</div>
             }
 
             return (
-                <div className="space-y-3">
+                <div className="space-y-3" onDrop={onDrop} onDragOver={onDragOver}>
                     {queue.map((item, index) => {
                         const isNowPlaying = isUpcomingQueue && index === 0;
                         const totalVotes = (item.likes?.length || 0) + (item.dislikes?.length || 0);
@@ -381,10 +544,34 @@
                                 onDragOver={(e) => e.preventDefault()}
                             >
                                 <div className="text-2xl font-bold text-cyan-300 w-8 text-center">{index + 1}</div>
-                                <div className="w-12 h-12 bg-gray-800 rounded-md flex items-center justify-center text-3xl text-gray-500">🎵</div>
+                                <div className="w-12 h-12 bg-gray-800 rounded-md flex items-center justify-center text-3xl text-gray-500">
+                                    {item.spotifyLink ? (
+                                        <a href={item.spotifyLink} target="_blank" rel="noopener noreferrer" title="Listen on Spotify">
+                                            <svg className="h-8 w-8 text-green-400 hover:text-green-300" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.423 13.923c-.213.32-.633.426-.953.213-2.66-1.633-6.003-1.996-9.98-1.093-.426.093-.853-.173-.946-.6-.093-.426.173-.853.6-.946 4.346-.986 8.08-.55 10.996 1.28.32.213.426.633.213.953zm.64-2.453c-.266.373-.76.48-1.133.213-2.986-1.813-7.466-2.346-11.186-1.28-.48.12-.986-.186-1.106-.666-.12-.48.186-.986.666-1.106 4.16-1.186 9.013-.593 12.386 1.493.373.267.48.76.213 1.133zm.107-2.56c-.32.426-.88.56-1.306.24-3.466-2.106-9.252-2.293-12.919-1.253-.56.133-1.12-.213-1.253-.773-.133-.56.213-1.12.773-1.253 4.186-1.146 10.452-.933 14.36 1.493.426.32.56.88.24 1.306z"/>
+                                            </svg>
+                                        </a>
+                                    ) : '�'}
+                                </div>
                                 <div className="flex-grow">
-                                    <p className={`font-bold text-lg ${item.type === 'event' ? 'text-white' : 'text-cyan-300'}`}>{item.danceName}</p>
-                                    <p className={`text-sm ${item.type === 'event' ? 'text-pink-200' : 'text-gray-300'}`}>{item.songName}</p>
+                                    <div className="flex items-center gap-2">
+                                        <p className={`font-bold text-lg ${item.type === 'event' ? 'text-white' : 'text-cyan-300'}`}>
+                                            {item.songName || item.danceName}
+                                        </p>
+                                    </div>
+                                    
+                                    {item.danceName && item.songName && (
+                                        <div className="flex items-center gap-2">
+                                            <p className={`text-sm ${item.type === 'event' ? 'text-pink-200' : 'text-gray-300'}`}>
+                                                ({item.danceName})
+                                            </p>
+                                            {item.stepSheetUrl && (
+                                                <a href={item.stepSheetUrl} target="_blank" rel="noopener noreferrer" title="View Step Sheet" className="bg-purple-600 text-white text-xs font-semibold px-2 py-0.5 rounded-md hover:bg-purple-700">
+                                                    step sheet
+                                                </a>
+                                            )}
+                                        </div>
+                                    )}
                                     <p className="text-xs text-gray-400">{item.artist}</p>
                                 </div>
                                 {canVote && (
@@ -461,14 +648,16 @@
         };
 
         const App = () => {
-            const [isDjLoggedIn, setIsDjLoggedIn] = useState(false);
+            const [loggedInDj, setLoggedInDj] = useState(null);
+            const [activeDj, setActiveDj] = useState(null);
             const [queue, setQueue] = useState([]);
             const [requests, setRequests] = useState([]);
-            const [tippingInfo, setTippingInfo] = useState({ venmo: '', cashapp: '' });
+            const [djs, setDjs] = useState([]);
             const [showLineRequestModal, setShowLineRequestModal] = useState(false);
             const [showPartnerRequestModal, setShowPartnerRequestModal] = useState(false);
             const [showLoginModal, setShowLoginModal] = useState(false);
             const [showLineDanceLessonModal, setShowLineDanceLessonModal] = useState(false);
+            const [showGeminiModal, setShowGeminiModal] = useState(false);
             const [editingItem, setEditingItem] = useState(null);
             const [venmoUser, setVenmoUser] = useState('');
             const [cashappUser, setCashappUser] = useState('');
@@ -489,6 +678,13 @@
                 }
                 return id;
             });
+
+            useEffect(() => {
+                if (loggedInDj) {
+                    setVenmoUser(loggedInDj.venmo || '');
+                    setCashappUser(loggedInDj.cashapp || '');
+                }
+            }, [loggedInDj]);
 
             useEffect(() => {
                 localStorage.setItem('votedSongs', JSON.stringify(votedSongs));
@@ -515,37 +711,59 @@
                 const unsubscribeRequests = requestsQuery.onSnapshot(snapshot => {
                     setRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                 });
+
+                const djsQuery = db.collection("djs");
+                const unsubscribeDjs = djsQuery.onSnapshot(snapshot => {
+                    setDjs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                });
                 
-                const tippingDoc = db.collection("settings").doc("tipping");
-                const unsubscribeTipping = tippingDoc.onSnapshot(doc => {
+                const activeDjDoc = db.collection("settings").doc("active_dj");
+                const unsubscribeActiveDj = activeDjDoc.onSnapshot(doc => {
                     if (doc.exists) {
-                        const data = doc.data();
-                        setTippingInfo(data); setVenmoUser(data.venmo || ''); setCashappUser(data.cashapp || '');
+                        setActiveDj(doc.data());
+                    } else {
+                        setActiveDj(null);
                     }
                 });
-                return () => { unsubscribeQueue(); unsubscribeRequests(); unsubscribeTipping(); };
+
+                return () => { 
+                    unsubscribeQueue(); 
+                    unsubscribeRequests(); 
+                    unsubscribeDjs(); 
+                    unsubscribeActiveDj();
+                };
             }, []);
 
             const handleAddRequestToQueue = async (request, position) => {
                 if (!db) return;
                 const upcomingQueue = queue.filter(q => !q.played);
                 const batch = db.batch();
+                
+                const newItemData = {
+                    type: 'song',
+                    danceName: request.danceName,
+                    songName: request.songName,
+                    artist: request.artist,
+                    spotifyLink: request.spotifyLink || '',
+                    stepSheetUrl: request.stepSheetUrl || '',
+                    played: false,
+                    likes: [],
+                    dislikes: []
+                };
 
                 if (position === 'next') {
-                    const newOrderIndex = 1; // Position #2
+                    newItemData.order = 1; // Position #2
                     upcomingQueue.forEach(item => {
-                        if (item.order >= newOrderIndex) {
+                        if (item.order >= newItemData.order) {
                             batch.update(db.collection('queue').doc(item.id), { order: item.order + 1 });
                         }
                     });
-                    const newDocRef = db.collection('queue').doc();
-                    batch.set(newDocRef, { type: 'song', danceName: request.danceName, songName: request.songName, artist: request.artist, order: newOrderIndex, played: false, likes: [], dislikes: [] });
                 } else { // 'last'
-                    const newOrderIndex = upcomingQueue.length;
-                    const newDocRef = db.collection('queue').doc();
-                    batch.set(newDocRef, { type: 'song', danceName: request.danceName, songName: request.songName, artist: request.artist, order: newOrderIndex, played: false, likes: [], dislikes: [] });
+                    newItemData.order = upcomingQueue.length;
                 }
                 
+                const newDocRef = db.collection('queue').doc();
+                batch.set(newDocRef, newItemData);
                 batch.delete(db.collection('requests').doc(request.id));
                 await batch.commit();
             };
@@ -553,17 +771,8 @@
             const handleDeleteRequest = async (id) => { if (!db) return; await db.collection('requests').doc(id).delete(); };
 
             const handleAddEventToQueue = (eventName, notes = '') => {
-                setPromptState({
-                    show: true,
-                    title: `Add Event: ${eventName}`,
-                    message: 'Enter any optional notes for this event.',
-                    onConfirm: async (noteInput) => {
-                        if (!db) return;
-                        const upcomingQueue = queue.filter(q => !q.played);
-                        await db.collection('queue').add({ type: 'event', danceName: eventName, songName: notes || noteInput, artist: '', order: upcomingQueue.length, played: false, likes: [], dislikes: [] });
-                        setPromptState({ show: false, title: '', message: '', onConfirm: () => {} });
-                    }
-                });
+                const upcomingQueue = queue.filter(q => !q.played);
+                db.collection('queue').add({ type: 'event', danceName: eventName, songName: notes, artist: '', order: upcomingQueue.length, played: false, likes: [], dislikes: [] });
             };
 
             const handleAddLineDanceLesson = async (danceName) => {
@@ -575,9 +784,11 @@
 
             const handleSaveTippingInfo = async (e) => {
                 e.preventDefault();
-                if (!db) return;
-                const tipRef = db.collection("settings").doc("tipping");
-                await tipRef.set({ venmo: venmoUser, cashapp: cashappUser }, { merge: true });
+                if (!db || !loggedInDj) return;
+                const djRef = db.collection("djs").doc(loggedInDj.id);
+                const updatedDjData = { ...loggedInDj, venmo: venmoUser, cashapp: cashappUser };
+                await djRef.update({ venmo: venmoUser, cashapp: cashappUser });
+                setLoggedInDj(updatedDjData);
                 setTipSaveConfirm(true);
                 setTimeout(() => setTipSaveConfirm(false), 2000);
             };
@@ -636,6 +847,42 @@
                 });
             };
 
+            const handleClearQueue = () => {
+                setConfirmState({
+                    show: true,
+                    title: 'Clear Entire Upcoming Queue',
+                    message: 'Are you sure you want to delete all upcoming items? This cannot be undone.',
+                    onConfirm: async () => {
+                        if (!db) return;
+                        const batch = db.batch();
+                        const upcomingItems = await db.collection('queue').where('played', '==', false).get();
+                        upcomingItems.forEach(doc => {
+                            batch.delete(doc.ref);
+                        });
+                        await batch.commit();
+                        setConfirmState({ show: false, title: '', message: '', onConfirm: () => {} });
+                    }
+                });
+            };
+
+            const handleClearHistory = () => {
+                setConfirmState({
+                    show: true,
+                    title: 'Clear Entire Played History',
+                    message: 'Are you sure you want to delete all played items from the history? This cannot be undone.',
+                    onConfirm: async () => {
+                        if (!db) return;
+                        const batch = db.batch();
+                        const playedItems = await db.collection('queue').where('played', '==', true).get();
+                        playedItems.forEach(doc => {
+                            batch.delete(doc.ref);
+                        });
+                        await batch.commit();
+                        setConfirmState({ show: false, title: '', message: '', onConfirm: () => {} });
+                    }
+                });
+            };
+
             const handleVote = async (songId, voteType) => {
                 if (!db) return;
                 const songRef = db.collection('queue').doc(songId);
@@ -664,9 +911,33 @@
                 setVotedSongs(newVotedSongs);
             };
 
-            const handleLoginSuccess = () => {
-                setIsDjLoggedIn(true);
+            const handleLoginSuccess = async (dj) => {
+                setLoggedInDj(dj);
                 setShowLoginModal(false);
+                if (db) {
+                    await db.collection("settings").doc("active_dj").set({ name: dj.name });
+                }
+            };
+
+            const handleLogout = async () => {
+                if (db) {
+                    await db.collection("settings").doc("active_dj").set({ name: null });
+                }
+                setLoggedInDj(null);
+            };
+
+            const handleDragStart = (e, type, payload) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ type, payload }));
+            };
+
+            const handleDropOnQueue = async (e) => {
+                e.preventDefault();
+                const data = JSON.parse(e.dataTransfer.getData('application/json'));
+                if (data.type === 'request') {
+                    await handleAddRequestToQueue(data.payload, 'last');
+                } else if (data.type === 'event') {
+                    handleAddEventToQueue(data.payload);
+                }
             };
 
             const upcomingQueue = queue.filter(item => !item.played);
@@ -677,6 +948,8 @@
                 req.danceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 req.customerName.toLowerCase().includes(searchTerm.toLowerCase())
             );
+            
+            const currentDjDetails = activeDj?.name ? djs.find(dj => dj.name === activeDj.name) : null;
 
             if (!db) {
                 return (
@@ -687,26 +960,37 @@
                 );
             }
 
-            if (isDjLoggedIn) {
+            if (loggedInDj) {
                 return (
                     <div className="bg-gray-900 text-white min-h-screen p-4 md:p-8">
                         {editingItem && <EditQueueItemModal item={editingItem} onSave={handleSaveEditedItem} onClose={() => setEditingItem(null)} />}
                         <ConfirmModal {...confirmState} onClose={() => setConfirmState({ ...confirmState, show: false })} />
                         <PromptModal {...promptState} onClose={() => setPromptState({ ...promptState, show: false })} />
                         <LineDanceLessonModal show={showLineDanceLessonModal} onClose={() => setShowLineDanceLessonModal(false)} onConfirm={handleAddLineDanceLesson} />
+                        <GeminiAnnouncementModal show={showGeminiModal} onClose={() => setShowGeminiModal(false)} />
 
                         <header className="flex justify-between items-center mb-6 pb-4 border-b-2 border-cyan-400">
-                            <h1 className="text-3xl md:text-4xl font-bold text-cyan-400">DJ Console</h1>
-                            <button onClick={() => setIsDjLoggedIn(false)} className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg">Logout</button>
+                            <div className="flex items-baseline gap-4">
+                                <h1 className="text-3xl md:text-4xl font-bold text-cyan-400">DJ Console</h1>
+                                <h2 className="text-2xl text-white font-semibold">{loggedInDj.name}</h2>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                {loggedInDj.role === 'admin' && (
+                                    <button className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">Admin Panel</button>
+                                )}
+                                <button className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Change Password</button>
+                                <button onClick={handleLogout} className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg">Logout</button>
+                            </div>
                         </header>
                         <div className="flex flex-col lg:flex-row gap-8">
                             <div className="lg:w-1/2 flex flex-col gap-6">
                                 <div>
-                                    <h3 className="text-2xl font-semibold text-pink-400 mb-3">Common Events</h3>
+                                    <h3 className="text-2xl font-semibold text-pink-400 mb-3">DJ Tools</h3>
                                     <div className="grid grid-cols-2 gap-3">
-                                        <button onClick={() => setShowLineDanceLessonModal(true)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold p-3 rounded-lg text-center">Line Dance Lesson</button>
+                                        <button onClick={() => setShowGeminiModal(true)} className="bg-purple-600 hover:bg-purple-700 col-span-2 text-white font-semibold p-3 rounded-lg text-center">✨ Generate Announcement</button>
+                                        <button draggable onDragStart={(e) => handleDragStart(e, 'event', 'Line Dance Lesson')} onClick={() => setShowLineDanceLessonModal(true)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold p-3 rounded-lg text-center cursor-grab">Line Dance Lesson</button>
                                         {['Line Dance', 'Country Partner', 'West Coast', 'Couples Dance', 'Last Call', 'Closing Time'].map(event => (
-                                            <button key={event} onClick={() => handleAddEventToQueue(event)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold p-3 rounded-lg text-center">{event}</button>
+                                            <button key={event} draggable onDragStart={(e) => handleDragStart(e, 'event', event)} onClick={() => handleAddEventToQueue(event)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold p-3 rounded-lg text-center cursor-grab">{event}</button>
                                         ))}
                                     </div>
                                 </div>
@@ -721,10 +1005,11 @@
                                     />
                                     <div className="bg-gray-800 p-4 rounded-lg max-h-96 overflow-y-auto space-y-3">
                                         {filteredRequests.length > 0 ? filteredRequests.map(req => (
-                                            <div key={req.id} className="bg-gray-700 p-3 rounded-lg">
+                                            <div key={req.id} draggable onDragStart={(e) => handleDragStart(e, 'request', req)} className="bg-gray-700 p-3 rounded-lg cursor-grab">
                                                 <p><span className="font-bold text-cyan-300">{req.danceName}</span> - <span className="text-gray-300">{req.songName}</span> by <span className="italic text-gray-400">{req.artist}</span></p>
                                                 <p className="text-sm text-gray-500">From: {req.customerName}</p>
                                                 {req.spotifyLink && <a href={req.spotifyLink} target="_blank" rel="noopener noreferrer" className="text-green-400 text-sm hover:underline">Spotify Link</a>}
+                                                {req.stepSheetUrl && <a href={req.stepSheetUrl} target="_blank" rel="noopener noreferrer" className="text-purple-400 text-sm hover:underline ml-2">Step Sheet</a>}
                                                 <div className="flex gap-2 mt-2">
                                                     <button onClick={() => handleAddRequestToQueue(req, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded">Add Next</button>
                                                     <button onClick={() => handleAddRequestToQueue(req, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded">Add Last</button>
@@ -749,15 +1034,20 @@
                             <div className="lg:w-1/2">
                                 <div className="flex justify-between items-center mb-3">
                                     <h3 className="text-2xl font-semibold text-pink-400">{showDjHistory ? 'Played History' : 'Live Dance Queue'}</h3>
-                                    <button onClick={() => setShowDjHistory(!showDjHistory)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold py-1 px-3 rounded-lg text-sm">
-                                        {showDjHistory ? 'View Queue' : 'View History'}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => setShowDjHistory(!showDjHistory)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold py-1 px-3 rounded-lg text-sm">
+                                            {showDjHistory ? 'View Queue' : 'View History'}
+                                        </button>
+                                        <button onClick={showDjHistory ? handleClearHistory : handleClearQueue} className="bg-red-800 hover:bg-red-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
+                                            {showDjHistory ? 'Clear History' : 'Clear Queue'}
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="bg-gray-800 p-4 rounded-lg min-h-[50vh]">
                                     {showDjHistory ? (
                                         <QueueList queue={recentlyPlayedQueue} isDjView={true} title="History" />
                                     ) : (
-                                        <QueueList queue={upcomingQueue} isDjView={true} onReorder={handleQueueReorder} onEdit={setEditingItem} onDelete={handleDeleteQueueItem} onMove={handleMoveQueueItem} onMarkAsPlayed={handleMarkAsPlayed} title="Queue" isUpcomingQueue={true} />
+                                        <QueueList queue={upcomingQueue} isDjView={true} onReorder={handleQueueReorder} onEdit={setEditingItem} onDelete={handleDeleteQueueItem} onMove={handleMoveQueueItem} onMarkAsPlayed={handleMarkAsPlayed} title="Queue" isUpcomingQueue={true} onDrop={handleDropOnQueue} onDragOver={(e) => e.preventDefault()} />
                                     )}
                                 </div>
                             </div>
@@ -769,15 +1059,18 @@
             return (
                 <div className="container mx-auto p-4 md:p-8">
                     <Modal show={showLineRequestModal} onClose={() => setShowLineRequestModal(false)} title="Request a Line Dance">
-                        <RequestForm onClose={() => setShowLineRequestModal(false)} tippingInfo={tippingInfo} formType="line" />
+                        <RequestForm onClose={() => setShowLineRequestModal(false)} tippingInfo={currentDjDetails} formType="line" />
                     </Modal>
                     <Modal show={showPartnerRequestModal} onClose={() => setShowPartnerRequestModal(false)} title="Request a Partner Dance">
-                        <RequestForm onClose={() => setShowPartnerRequestModal(false)} tippingInfo={tippingInfo} formType="partner" />
+                        <RequestForm onClose={() => setShowPartnerRequestModal(false)} tippingInfo={currentDjDetails} formType="partner" />
                     </Modal>
                     <Modal show={showLoginModal} onClose={() => setShowLoginModal(false)} title="DJ Login">
-                        <DJLogin onLogin={handleLoginSuccess} />
+                        <DJLogin onLogin={handleLoginSuccess} djs={djs} />
                     </Modal>
-                    <header className="text-center mb-8">
+                    <header className="relative text-center mb-8">
+                         <button onClick={() => setShowLoginModal(true)} className="absolute top-0 right-0 text-gray-400 hover:text-cyan-300 transition-colors bg-gray-800/50 hover:bg-gray-700/70 font-bold py-2 px-4 rounded-lg">
+                            DJ Login
+                        </button>
                         <h1 className="text-7xl md:text-8xl font-neon" style={{ color: '#ff00ff' }}>
                             Neon Boots
                         </h1>
@@ -795,7 +1088,10 @@
                         </div>
                     </header>
                     <main>
-                        <h2 className="text-3xl font-bold text-center text-cyan-400 mb-4">Live Dance Queue</h2>
+                        <div className="flex justify-center items-baseline gap-4 mb-4">
+                            <h2 className="text-3xl font-bold text-center text-cyan-400">Live Dance Queue</h2>
+                            {activeDj?.name && <p className="text-lg text-gray-300">Your DJ is {activeDj.name}</p>}
+                        </div>
                         <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
                             <QueueList queue={upcomingQueue} isDjView={false} title="Queue" isUpcomingQueue={true} onVote={handleVote} votedSongs={votedSongs} />
                         </div>
@@ -806,14 +1102,12 @@
                                 <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
                                     <QueueList queue={recentlyPlayedQueue} isDjView={false} title="Recently Played" onVote={handleVote} votedSongs={votedSongs} />
                                 </div>
-                                <TippingSection tippingInfo={tippingInfo} />
                             </div>
                         )}
+                        <TippingSection tippingInfo={currentDjDetails} />
                     </main>
                     <footer className="text-center mt-8 pt-4 border-t border-gray-700">
-                        <button onClick={() => setShowLoginModal(true)} className="text-gray-500 hover:text-cyan-300 transition-colors">
-                            DJ Login
-                        </button>
+                        <p className="text-gray-500">&copy; 2024 Neon Boots. All Rights Reserved.</p>
                     </footer>
                 </div>
             );
@@ -825,3 +1119,4 @@
     </script>
 </body>
 </html>
+�
