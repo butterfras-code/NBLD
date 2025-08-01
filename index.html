@@ -1,644 +1,725 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-    getFirestore, 
-    collection, 
-    onSnapshot, 
-    addDoc, 
-    deleteDoc, 
-    doc, 
-    updateDoc, 
-    getDocs, 
-    writeBatch,
-    query,
-    orderBy
-} from 'firebase/firestore';
-
-// --- Firebase Configuration ---
-// IMPORTANT: Replace this with your actual Firebase project configuration.
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
-
-// --- Initialize Firebase ---
-// NOTE: In a real app, you might want to handle the case where firebaseConfig is not set.
-// For this example, we assume it will be replaced with actual credentials.
-let app;
-let db;
-try {
-    app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
-} catch (error) {
-    console.error("Firebase initialization error. Please provide your Firebase config.", error);
-    // In a real app, you might show an error message to the user.
-}
-
-
-// --- Helper Functions for Firestore ---
-
-// Function to seed initial data if collections are empty
-const seedInitialData = async () => {
-    if (!db) return;
-    const requestsRef = collection(db, 'requests');
-    const queueRef = collection(db, 'queue');
-    
-    const requestsSnap = await getDocs(requestsRef);
-    const queueSnap = await getDocs(queueRef);
-
-    if (requestsSnap.empty && queueSnap.empty) {
-        console.log("Empty database detected. Seeding initial data...");
-        const batch = writeBatch(db);
-
-        // Sample Requests
-        const sampleRequests = [
-            { danceName: 'Electric Slide', songName: 'Electric Boogie', artist: 'Marcia Griffiths', customerName: 'Brenda', spotifyLink: '', createdAt: new Date() },
-            { danceName: 'Two Step', songName: 'Any Man of Mine', artist: 'Shania Twain', customerName: 'Dave', spotifyLink: '', createdAt: new Date() },
-        ];
-        sampleRequests.forEach(req => {
-            const docRef = doc(collection(db, 'requests'));
-            batch.set(docRef, req);
-        });
-
-        // Sample Queue
-        const sampleQueue = [
-            { type: 'song', danceName: 'Tush Push', songName: 'Tush Push', artist: 'Trisha Yearwood', order: 1 },
-            { type: 'event', danceName: 'Line Dance Lesson', songName: 'Teaching: Copperhead Road', artist: '', order: 2 },
-            { type: 'song', danceName: 'Good Time', songName: 'Good Time', artist: 'Alan Jackson', order: 3 },
-        ];
-        sampleQueue.forEach(item => {
-            const docRef = doc(collection(db, 'queue'));
-            batch.set(docRef, item);
-        });
-
-        await batch.commit();
-        console.log("Initial data seeded.");
-    }
-};
-
-
-// --- React Components ---
-
-// Generic Modal Component
-const Modal = ({ show, onClose, title, children }) => {
-    if (!show) {
-        return null;
-    }
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4">
-            <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 relative">
-                <h2 className="text-2xl font-bold text-pink-400 mb-4">{title}</h2>
-                <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl">&times;</button>
-                {children}
-            </div>
-        </div>
-    );
-};
-
-// Customer Song Request Form
-const RequestForm = ({ onClose, tippingInfo }) => {
-    const [danceName, setDanceName] = useState('');
-    const [songName, setSongName] = useState('');
-    const [artist, setArtist] = useState('');
-    const [spotifyLink, setSpotifyLink] = useState('');
-    const [customerName, setCustomerName] = useState('');
-    const [showThanksModal, setShowThanksModal] = useState(false);
-
-    const lineDances = [
-        { name: 'Tush Push', song: 'Tush Push', artist: 'Trisha Yearwood' },
-        { name: 'Copperhead Road', song: 'Copperhead Road', artist: 'Steve Earle' },
-        { name: 'Watermelon Crawl', song: 'Watermelon Crawl', artist: 'Tracy Byrd' },
-        { name: 'Boot Scootin\' Boogie', song: 'Boot Scootin\' Boogie', artist: 'Brooks & Dunn' },
-    ];
-
-    const handleLineDanceSelect = (e) => {
-        const selectedDanceName = e.target.value;
-        const dance = lineDances.find(d => d.name === selectedDanceName);
-        if (dance) {
-            setDanceName(dance.name);
-            setSongName(dance.song);
-            setArtist(dance.artist);
-        } else {
-            setDanceName('');
-            setSongName('');
-            setArtist('');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Boots DJ Request App</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for the 'Brush Script MT' style -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom font for the header to approximate the neon sign look */
+        .font-neon {
+            font-family: 'Teko', sans-serif;
+            text-shadow: 0 0 5px #ff00ff, 0 0 10px #ff00ff, 0 0 20px #ff00ff, 0 0 40px #00ffff, 0 0 80px #00ffff;
         }
-    };
+        .neon-checkmark {
+            filter: drop-shadow(0 0 3px #39ff14) drop-shadow(0 0 5px #39ff14);
+        }
+        .now-playing-glow {
+            box-shadow: 0 0 8px #00ffff, 0 0 12px #00ffff;
+        }
+        .rating-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="bg-gray-900">
+    <!-- Root element for the React app -->
+    <div id="root"></div>
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!danceName || !songName || !artist || !customerName || !db) return;
+    <!-- React and Babel CDNs for in-browser JSX transformation -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Firebase SDKs (Compat version for broader compatibility) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 
+    <!-- React Application Code -->
+    <script type="text/babel">
+        // Since we're not using a bundler, we get React functions from the global 'React' object
+        const { useState, useEffect, useRef, useCallback } = React;
+        
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBKmzMtCnEWIFEiq6WK6f1E4JTCkC2tnt0",
+            authDomain: "neonbootsdjapp.firebaseapp.com",
+            projectId: "neonbootsdjapp",
+            storageBucket: "neonbootsdjapp.appspot.com",
+            messagingSenderId: "916767461225",
+            appId: "1:916767461225:web:aa07f19c1719cba8d837f8",
+            measurementId: "G-P1KDRD91W3"
+        };
+
+        // --- Initialize Firebase (Compat Syntax) ---
+        let app;
+        let db;
         try {
-            await addDoc(collection(db, 'requests'), {
-                danceName,
-                songName,
-                artist,
-                spotifyLink,
-                customerName,
-                createdAt: new Date(),
-            });
-            setShowThanksModal(true);
+            app = firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
         } catch (error) {
-            console.error("Error adding request: ", error);
-            alert("Sorry, there was an issue submitting your request.");
-        }
-    };
-
-    if (showThanksModal) {
-        return (
-            <div className="text-center">
-                 <h2 className="text-2xl font-bold text-pink-400 mb-4">Thank You!</h2>
-                <p className="text-gray-200 mb-4">Your request has been sent to the DJ.</p>
-                {(tippingInfo?.venmo || tippingInfo?.cashapp) && (
-                    <div className="border-t border-gray-600 pt-4 mt-4">
-                        <p className="text-lg text-cyan-300 font-semibold mb-2">Enjoying the music? Tip the DJ!</p>
-                        {tippingInfo.venmo && <a href={`https://venmo.com/${tippingInfo.venmo}`} target="_blank" rel="noopener noreferrer" className="block text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 my-2">Venmo: @{tippingInfo.venmo}</a>}
-                        {tippingInfo.cashapp && <a href={`https://cash.app/$${tippingInfo.cashapp}`} target="_blank" rel="noopener noreferrer" className="block text-white bg-green-500 hover:bg-green-600 rounded-lg px-4 py-2 my-2">Cash App: ${tippingInfo.cashapp}</a>}
-                    </div>
-                )}
-                <button onClick={() => { setShowThanksModal(false); onClose(); }} className="mt-4 bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg w-full">
-                    Close
-                </button>
-            </div>
-        );
-    }
-
-    return (
-        <form onSubmit={handleSubmit}>
-            <div className="mb-4">
-                <label htmlFor="line-dance-select" className="block text-cyan-300 text-sm font-bold mb-2">Quick Select a Line Dance</label>
-                <select id="line-dance-select" onChange={handleLineDanceSelect} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
-                    <option value="">-- Select a Dance --</option>
-                    {lineDances.map(dance => <option key={dance.name} value={dance.name}>{dance.name}</option>)}
-                </select>
-            </div>
-            <p className="text-center text-gray-400 my-2">OR</p>
-            <div className="mb-4">
-                <label htmlFor="dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style*</label>
-                <input type="text" id="dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-            </div>
-            <div className="mb-4">
-                <label htmlFor="song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song Name*</label>
-                <input type="text" id="song-name" value={songName} onChange={e => setSongName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-            </div>
-            <div className="mb-4">
-                <label htmlFor="artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist*</label>
-                <input type="text" id="artist-name" value={artist} onChange={e => setArtist(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-            </div>
-            <div className="mb-4">
-                <label htmlFor="spotify-link" className="block text-cyan-300 text-sm font-bold mb-2">Spotify Link (Optional)</label>
-                <input type="url" id="spotify-link" value={spotifyLink} onChange={e => setSpotifyLink(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-            </div>
-            <div className="mb-4">
-                <label htmlFor="customer-name" className="block text-cyan-300 text-sm font-bold mb-2">Your Name*</label>
-                <input type="text" id="customer-name" value={customerName} onChange={e => setCustomerName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-            </div>
-            <button type="submit" className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg w-full">Submit Request</button>
-        </form>
-    );
-};
-
-// DJ Login Form
-const DJLogin = ({ onLogin, onClose }) => {
-    const [djName, setDjName] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-
-    const handleLogin = (e) => {
-        e.preventDefault();
-        // Simple password check as per requirements
-        if ((djName === 'Angie' || djName === 'Justin') && password === 'puppies') {
-            onLogin();
-        } else {
-            setError('Invalid DJ Name or Password.');
-        }
-    };
-
-    return (
-        <form onSubmit={handleLogin}>
-            {error && <p className="text-red-500 text-center mb-4">{error}</p>}
-            <div className="mb-4">
-                <label htmlFor="dj-name" className="block text-cyan-300 text-sm font-bold mb-2">DJ Name</label>
-                <select id="dj-name" value={djName} onChange={e => setDjName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
-                    <option value="">Select DJ</option>
-                    <option value="Angie">Angie</option>
-                    <option value="Justin">Justin</option>
-                </select>
-            </div>
-            <div className="mb-4">
-                <label htmlFor="dj-password" className="block text-cyan-300 text-sm font-bold mb-2">Password</label>
-                <input type="password" id="dj-password" value={password} onChange={e => setPassword(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-            </div>
-            <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg w-full">Login</button>
-        </form>
-    );
-};
-
-// Queue List (for both Customer and DJ)
-const QueueList = ({ queue, isDjView, onReorder, onEdit, onDelete, onMove }) => {
-    const dragItem = useRef(null);
-    const dragOverItem = useRef(null);
-
-    const handleDragStart = (e, index) => {
-        dragItem.current = index;
-        e.dataTransfer.effectAllowed = 'move';
-    };
-
-    const handleDragEnter = (e, index) => {
-        dragOverItem.current = index;
-    };
-
-    const handleDragEnd = () => {
-        if (dragItem.current !== null && dragOverItem.current !== null && dragItem.current !== dragOverItem.current) {
-            onReorder(dragItem.current, dragOverItem.current);
-        }
-        dragItem.current = null;
-        dragOverItem.current = null;
-    };
-    
-    if (queue.length === 0) {
-        return <div className="text-center text-gray-400 py-8">The queue is currently empty.</div>
-    }
-
-    return (
-        <div className="space-y-3">
-            {queue.map((item, index) => (
-                <div 
-                    key={item.id}
-                    className={`flex items-center gap-4 p-3 rounded-lg shadow-md transition-all ${item.type === 'event' ? 'bg-pink-600 text-white' : 'bg-gray-700'} ${isDjView ? 'cursor-move' : ''}`}
-                    draggable={isDjView}
-                    onDragStart={(e) => handleDragStart(e, index)}
-                    onDragEnter={(e) => handleDragEnter(e, index)}
-                    onDragEnd={handleDragEnd}
-                    onDragOver={(e) => e.preventDefault()}
-                >
-                    <div className="text-2xl font-bold text-cyan-300 w-8 text-center">{index + 1}</div>
-                    <div className="w-12 h-12 bg-gray-800 rounded-md flex items-center justify-center text-3xl text-gray-500">
-                        🎵
-                    </div>
-                    <div className="flex-grow">
-                        <p className={`font-bold text-lg ${item.type === 'event' ? 'text-white' : 'text-cyan-300'}`}>{item.danceName}</p>
-                        <p className={`text-sm ${item.type === 'event' ? 'text-pink-200' : 'text-gray-300'}`}>{item.songName}</p>
-                        <p className="text-xs text-gray-400">{item.artist}</p>
-                    </div>
-                    {isDjView && (
-                        <div className="flex flex-col md:flex-row items-center gap-2">
-                            <div className="flex flex-col">
-                                <button onClick={() => onMove(index, 'up')} className="text-gray-300 hover:text-white">▲</button>
-                                <button onClick={() => onMove(index, 'down')} className="text-gray-300 hover:text-white">▼</button>
-                            </div>
-                            <button onClick={() => onEdit(item)} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded text-xs">Edit</button>
-                            <button onClick={() => onDelete(item.id)} className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-xs">Delete</button>
-                        </div>
-                    )}
-                </div>
-            ))}
-        </div>
-    );
-};
-
-
-// Edit Queue Item Modal
-const EditQueueItemModal = ({ item, onSave, onClose }) => {
-    const [danceName, setDanceName] = useState(item.danceName);
-    const [songName, setSongName] = useState(item.songName);
-    const [artist, setArtist] = useState(item.artist);
-
-    const handleSave = (e) => {
-        e.preventDefault();
-        onSave({ ...item, danceName, songName, artist });
-    };
-
-    return (
-        <Modal show={true} onClose={onClose} title="Edit Queue Item">
-            <form onSubmit={handleSave}>
-                <div className="mb-4">
-                    <label htmlFor="edit-dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style</label>
-                    <input type="text" id="edit-dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-                </div>
-                <div className="mb-4">
-                    <label htmlFor="edit-song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song/Event Info</label>
-                    <input type="text" id="edit-song-name" value={songName} onChange={e => setSongName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-                </div>
-                <div className="mb-4">
-                    <label htmlFor="edit-artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist</label>
-                    <input type="text" id="edit-artist-name" value={artist} onChange={e => setArtist(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
-                </div>
-                <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg w-full">Save Changes</button>
-            </form>
-        </Modal>
-    );
-};
-
-
-// --- Main App Component ---
-export default function App() {
-    // State
-    const [isDjLoggedIn, setIsDjLoggedIn] = useState(false);
-    const [queue, setQueue] = useState([]);
-    const [requests, setRequests] = useState([]);
-    const [tippingInfo, setTippingInfo] = useState({ venmo: '', cashapp: '' });
-    
-    // Modal visibility state
-    const [showRequestModal, setShowRequestModal] = useState(false);
-    const [showLoginModal, setShowLoginModal] = useState(false);
-    const [editingItem, setEditingItem] = useState(null);
-
-    // DJ Console specific state
-    const [venmoUser, setVenmoUser] = useState('');
-    const [cashappUser, setCashappUser] = useState('');
-    const [tipSaveConfirm, setTipSaveConfirm] = useState(false);
-
-    // --- Effects for Firebase Listeners ---
-    useEffect(() => {
-        if (!db) {
-            console.log("Firestore not initialized, skipping data fetch.");
-            return;
+            console.error("Firebase initialization error. Please provide your Firebase config.", error);
         }
 
-        // Seed data on first load
-        seedInitialData();
-
-        // Queue listener
-        const q = query(collection(db, "queue"), orderBy("order"));
-        const unsubscribeQueue = onSnapshot(q, (snapshot) => {
-            const queueData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setQueue(queueData);
-        });
-
-        // Requests listener
-        const requestsQuery = query(collection(db, "requests"), orderBy("createdAt", "desc"));
-        const unsubscribeRequests = onSnapshot(requestsQuery, (snapshot) => {
-            const requestsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setRequests(requestsData);
-        });
-
-        // Tipping info listener
-        const unsubscribeTipping = onSnapshot(doc(db, "settings", "tipping"), (doc) => {
-            if (doc.exists()) {
-                const data = doc.data();
-                setTippingInfo(data);
-                setVenmoUser(data.venmo || '');
-                setCashappUser(data.cashapp || '');
+        // --- Helper Functions for Firestore ---
+        const seedInitialData = async () => {
+            if (!db) return;
+            const configDocSnap = await db.collection('config').doc('seeded').get();
+            if (configDocSnap.exists) {
+                return; // Already seeded
             }
-        });
 
-        // Cleanup subscriptions on unmount
-        return () => {
-            unsubscribeQueue();
-            unsubscribeRequests();
-            unsubscribeTipping();
-        };
-    }, []);
+            console.log("Empty database detected. Seeding initial data...");
+            const batch = db.batch();
 
-    // --- DJ Actions ---
-    const handleAddRequestToQueue = async (request, position) => {
-        if (!db) return;
-        const newQueueItem = {
-            type: 'song',
-            danceName: request.danceName,
-            songName: request.songName,
-            artist: request.artist,
-            order: position === 'next' ? 0 : queue.length + 1,
-        };
-
-        const batch = writeBatch(db);
-        
-        // Add the new item
-        const newDocRef = doc(collection(db, 'queue'));
-        batch.set(newDocRef, newQueueItem);
-
-        // If adding 'next', re-order existing items
-        if (position === 'next') {
-            queue.forEach(item => {
-                const docRef = doc(db, 'queue', item.id);
-                batch.update(docRef, { order: item.order + 1 });
+            const sampleRequests = [
+                { danceName: 'Electric Slide', songName: 'Electric Boogie', artist: 'Marcia Griffiths', customerName: 'Brenda', spotifyLink: '', createdAt: new Date() },
+                { danceName: 'Two Step', songName: 'Any Man of Mine', artist: 'Shania Twain', customerName: 'Dave', spotifyLink: '', createdAt: new Date() },
+            ];
+            sampleRequests.forEach(req => {
+                const docRef = db.collection('requests').doc();
+                batch.set(docRef, req);
             });
-        }
-        
-        // Delete the original request
-        const requestRef = doc(db, 'requests', request.id);
-        batch.delete(requestRef);
-        
-        await batch.commit();
-    };
 
-    const handleDeleteRequest = async (id) => {
-        if (!db) return;
-        await deleteDoc(doc(db, 'requests', id));
-    };
-
-    const handleAddEventToQueue = async (eventName) => {
-        if (!db) return;
-        const note = prompt(`Add optional notes for "${eventName}":`);
-        await addDoc(collection(db, 'queue'), {
-            type: 'event',
-            danceName: eventName,
-            songName: note || '',
-            artist: '',
-            order: queue.length + 1,
-        });
-    };
-
-    const handleSaveTippingInfo = async (e) => {
-        e.preventDefault();
-        if (!db) return;
-        try {
-            await updateDoc(doc(db, "settings", "tipping"), {
-                venmo: venmoUser,
-                cashapp: cashappUser,
+            const sampleQueue = [
+                { type: 'song', danceName: 'Tush Push', songName: 'Tush Push', artist: 'Trisha Yearwood', order: 1, played: true, likes: [], dislikes: [] },
+                { type: 'event', danceName: 'Line Dance Lesson', songName: 'Teaching: Copperhead Road', artist: '', order: 2, played: false, likes: [], dislikes: [] },
+                { type: 'song', danceName: 'Good Time', songName: 'Good Time', artist: 'Alan Jackson', order: 3, played: false, likes: [], dislikes: [] },
+            ];
+            sampleQueue.forEach(item => {
+                const docRef = db.collection('queue').doc();
+                batch.set(docRef, item);
             });
-            setTipSaveConfirm(true);
-            setTimeout(() => setTipSaveConfirm(false), 2000);
-        } catch (error) {
-            // If the doc doesn't exist, create it.
-            if (error.code === 'not-found') {
-                 await setDoc(doc(db, "settings", "tipping"), {
-                    venmo: venmoUser,
-                    cashapp: cashappUser,
+
+            batch.set(db.collection('config').doc('seeded'), { done: true });
+
+            await batch.commit();
+            console.log("Initial data seeded.");
+        };
+
+        // --- React Components ---
+
+        const Modal = ({ show, onClose, title, children }) => {
+            if (!show) return null;
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4">
+                    <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 relative">
+                        <h2 className="text-2xl font-bold text-pink-400 mb-4">{title}</h2>
+                        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl">&times;</button>
+                        {children}
+                    </div>
+                </div>
+            );
+        };
+
+        const ConfirmModal = ({ show, onClose, onConfirm, title, message }) => {
+            if (!show) return null;
+            return (
+                <Modal show={show} onClose={onClose} title={title}>
+                    <p className="text-gray-300 mb-6">{message}</p>
+                    <div className="flex justify-end gap-4">
+                        <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
+                        <button onClick={onConfirm} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Confirm</button>
+                    </div>
+                </Modal>
+            );
+        };
+
+        const PromptModal = ({ show, onClose, onConfirm, title, message }) => {
+            const [inputValue, setInputValue] = useState('');
+            if (!show) return null;
+
+            const handleConfirm = () => {
+                onConfirm(inputValue);
+                setInputValue('');
+            };
+
+            return (
+                <Modal show={show} onClose={onClose} title={title}>
+                    <p className="text-gray-300 mb-4">{message}</p>
+                    <input 
+                        type="text" 
+                        value={inputValue} 
+                        onChange={(e) => setInputValue(e.target.value)} 
+                        className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 mb-6"
+                        placeholder="Optional notes..."
+                    />
+                    <div className="flex justify-end gap-4">
+                        <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
+                        <button onClick={handleConfirm} className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg">Add Event</button>
+                    </div>
+                </Modal>
+            );
+        };
+
+        const RequestForm = ({ onClose, tippingInfo }) => {
+            const [danceName, setDanceName] = useState('');
+            const [songName, setSongName] = useState('');
+            const [artist, setArtist] = useState('');
+            const [spotifyLink, setSpotifyLink] = useState('');
+            const [customerName, setCustomerName] = useState('');
+            const [showThanksModal, setShowThanksModal] = useState(false);
+
+            const lineDances = [
+                { name: 'Tush Push', song: 'Tush Push', artist: 'Trisha Yearwood' },
+                { name: 'Copperhead Road', song: 'Copperhead Road', artist: 'Steve Earle' },
+                { name: 'Watermelon Crawl', song: 'Watermelon Crawl', artist: 'Tracy Byrd' },
+                { name: 'Boot Scootin\' Boogie', song: 'Boot Scootin\' Boogie', artist: 'Brooks & Dunn' },
+            ];
+
+            const handleLineDanceSelect = (e) => {
+                const selectedDanceName = e.target.value;
+                const dance = lineDances.find(d => d.name === selectedDanceName);
+                if (dance) {
+                    setDanceName(dance.name); setSongName(dance.song); setArtist(dance.artist);
+                } else {
+                    setDanceName(''); setSongName(''); setArtist('');
+                }
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!danceName || !songName || !artist || !customerName || !db) return;
+                try {
+                    await db.collection('requests').add({ danceName, songName, artist, spotifyLink, customerName, createdAt: new Date() });
+                    setShowThanksModal(true);
+                } catch (error) {
+                    console.error("Error adding request: ", error);
+                }
+            };
+
+            if (showThanksModal) {
+                return (
+                    <div className="text-center">
+                        <h2 className="text-2xl font-bold text-pink-400 mb-4">Thank You!</h2>
+                        <p className="text-gray-200 mb-4">Your request has been sent to the DJ.</p>
+                        {(tippingInfo?.venmo || tippingInfo?.cashapp) && (
+                            <div className="border-t border-gray-600 pt-4 mt-4">
+                                <p className="text-lg text-cyan-300 font-semibold mb-2">Enjoying the music? Tip the DJ!</p>
+                                {tippingInfo.venmo && <a href={`https://venmo.com/${tippingInfo.venmo}`} target="_blank" rel="noopener noreferrer" className="block text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 my-2">Venmo: @{tippingInfo.venmo}</a>}
+                                {tippingInfo.cashapp && <a href={`https://cash.app/$${tippingInfo.cashapp}`} target="_blank" rel="noopener noreferrer" className="block text-white bg-green-500 hover:bg-green-600 rounded-lg px-4 py-2 my-2">Cash App: ${tippingInfo.cashapp}</a>}
+                            </div>
+                        )}
+                        <button onClick={() => { setShowThanksModal(false); onClose(); }} className="mt-4 bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg w-full">Close</button>
+                    </div>
+                );
+            }
+
+            return (
+                <form onSubmit={handleSubmit}>
+                    <div className="mb-4">
+                        <label htmlFor="line-dance-select" className="block text-cyan-300 text-sm font-bold mb-2">Quick Select a Line Dance</label>
+                        <select id="line-dance-select" onChange={handleLineDanceSelect} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
+                            <option value="">-- Select a Dance --</option>
+                            {lineDances.map(dance => <option key={dance.name} value={dance.name}>{dance.name}</option>)}
+                        </select>
+                    </div>
+                    <p className="text-center text-gray-400 my-2">OR</p>
+                    <div className="mb-4">
+                        <label htmlFor="dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style*</label>
+                        <input type="text" id="dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song Name*</label>
+                        <input type="text" id="song-name" value={songName} onChange={e => setSongName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist*</label>
+                        <input type="text" id="artist-name" value={artist} onChange={e => setArtist(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="spotify-link" className="block text-cyan-300 text-sm font-bold mb-2">Spotify Link (Optional)</label>
+                        <input type="url" id="spotify-link" value={spotifyLink} onChange={e => setSpotifyLink(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="customer-name" className="block text-cyan-300 text-sm font-bold mb-2">Your Name*</label>
+                        <input type="text" id="customer-name" value={customerName} onChange={e => setCustomerName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <button type="submit" className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg w-full">Submit Request</button>
+                </form>
+            );
+        };
+
+        const DJLogin = ({ onLogin }) => {
+            const [djName, setDjName] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if ((djName === 'Angie' || djName === 'Justin') && password === 'puppies') {
+                    onLogin();
+                } else {
+                    setError('Invalid DJ Name or Password.');
+                }
+            };
+
+            return (
+                <form onSubmit={handleLogin}>
+                    {error && <p className="text-red-500 text-center mb-4">{error}</p>}
+                    <div className="mb-4">
+                        <label htmlFor="dj-name" className="block text-cyan-300 text-sm font-bold mb-2">DJ Name</label>
+                        <select id="dj-name" value={djName} onChange={e => setDjName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
+                            <option value="">Select DJ</option>
+                            <option value="Angie">Angie</option>
+                            <option value="Justin">Justin</option>
+                        </select>
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="dj-password" className="block text-cyan-300 text-sm font-bold mb-2">Password</label>
+                        <input type="password" id="dj-password" value={password} onChange={e => setPassword(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg w-full">Login</button>
+                </form>
+            );
+        };
+
+        const QueueList = ({ queue, isDjView, onReorder, onEdit, onDelete, onMove, onMarkAsPlayed, title, isUpcomingQueue, onVote, votedSongs }) => {
+            const dragItem = useRef(null);
+            const dragOverItem = useRef(null);
+
+            const handleDragStart = (e, index) => {
+                dragItem.current = index;
+                e.dataTransfer.effectAllowed = 'move';
+            };
+            const handleDragEnter = (e, index) => { dragOverItem.current = index; };
+            const handleDragEnd = () => {
+                if (dragItem.current !== null && dragOverItem.current !== null && dragItem.current !== dragOverItem.current) {
+                    onReorder(dragItem.current, dragOverItem.current);
+                }
+                dragItem.current = null;
+                dragOverItem.current = null;
+            };
+            
+            if (queue.length === 0) {
+                return <div className="text-center text-gray-400 py-8">The {title.toLowerCase()} is currently empty.</div>
+            }
+
+            return (
+                <div className="space-y-3">
+                    {queue.map((item, index) => {
+                        const isNowPlaying = isUpcomingQueue && index === 0;
+                        const totalVotes = (item.likes?.length || 0) + (item.dislikes?.length || 0);
+                        const likePercentage = totalVotes > 0 ? Math.round(((item.likes?.length || 0) / totalVotes) * 100) : null;
+
+                        const itemContent = (
+                            <div 
+                                className={`flex items-center gap-4 p-3 rounded-lg shadow-md transition-all 
+                                    ${item.type === 'event' ? 'bg-pink-600' : 'bg-gray-700'} 
+                                    ${item.played ? 'opacity-50' : ''}
+                                    ${isDjView && !item.played ? 'cursor-move' : ''}`}
+                                draggable={isDjView && !item.played}
+                                onDragStart={(e) => handleDragStart(e, index)}
+                                onDragEnter={(e) => handleDragEnter(e, index)}
+                                onDragEnd={handleDragEnd}
+                                onDragOver={(e) => e.preventDefault()}
+                            >
+                                <div className="text-2xl font-bold text-cyan-300 w-8 text-center">{index + 1}</div>
+                                <div className="w-12 h-12 bg-gray-800 rounded-md flex items-center justify-center text-3xl text-gray-500">🎵</div>
+                                <div className="flex-grow">
+                                    <p className={`font-bold text-lg ${item.type === 'event' ? 'text-white' : 'text-cyan-300'}`}>{item.danceName}</p>
+                                    <p className={`text-sm ${item.type === 'event' ? 'text-pink-200' : 'text-gray-300'}`}>{item.songName}</p>
+                                    <p className="text-xs text-gray-400">{item.artist}</p>
+                                </div>
+                                {!isDjView && item.type === 'song' && (
+                                    <div className="flex gap-2">
+                                        <button onClick={() => onVote(item.id, 'like')} disabled={votedSongs.includes(item.id)} className="rating-button text-green-400 hover:text-green-300 disabled:text-green-600">👍</button>
+                                        <button onClick={() => onVote(item.id, 'dislike')} disabled={votedSongs.includes(item.id)} className="rating-button text-red-400 hover:text-red-300 disabled:text-red-600">👎</button>
+                                    </div>
+                                )}
+                                {isDjView && (
+                                    <div className="flex flex-col md:flex-row items-center gap-2">
+                                        {likePercentage !== null && <div className="text-sm font-bold text-green-400">{likePercentage}% 👍</div>}
+                                        {!item.played && (
+                                            <button onClick={() => onMarkAsPlayed(item.id)} className="text-green-400 hover:text-green-300 p-1 rounded-full neon-checkmark" title="Mark as Played">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                        <div className="flex flex-col">
+                                            <button onClick={() => onMove(index, 'up')} className="text-gray-300 hover:text-white" disabled={item.played}>▲</button>
+                                            <button onClick={() => onMove(index, 'down')} className="text-gray-300 hover:text-white" disabled={item.played}>▼</button>
+                                        </div>
+                                        <button onClick={() => onEdit(item)} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded text-xs">Edit</button>
+                                        <button onClick={() => onDelete(item.id)} className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-xs">Delete</button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+
+                        if (isNowPlaying) {
+                            return (
+                                <div key={item.id} className="border-2 border-cyan-400 rounded-lg p-2 now-playing-glow">
+                                    <p className="text-center font-bold text-cyan-300 text-sm animate-pulse pb-2">NOW PLAYING</p>
+                                    {itemContent}
+                                </div>
+                            );
+                        }
+
+                        return <div key={item.id}>{itemContent}</div>;
+                    })}
+                </div>
+            );
+        };
+
+        const EditQueueItemModal = ({ item, onSave, onClose }) => {
+            const [danceName, setDanceName] = useState(item.danceName);
+            const [songName, setSongName] = useState(item.songName);
+            const [artist, setArtist] = useState(item.artist);
+
+            const handleSave = (e) => {
+                e.preventDefault();
+                onSave({ ...item, danceName, songName, artist });
+            };
+
+            return (
+                <Modal show={true} onClose={onClose} title="Edit Queue Item">
+                    <form onSubmit={handleSave}>
+                        <div className="mb-4">
+                            <label htmlFor="edit-dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style</label>
+                            <input type="text" id="edit-dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                        <div className="mb-4">
+                            <label htmlFor="edit-song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song/Event Info</label>
+                            <input type="text" id="edit-song-name" value={songName} onChange={e => setSongName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                        <div className="mb-4">
+                            <label htmlFor="edit-artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist</label>
+                            <input type="text" id="edit-artist-name" value={artist} onChange={e => setArtist(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                        <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg w-full">Save Changes</button>
+                    </form>
+                </Modal>
+            );
+        };
+
+        const App = () => {
+            const [isDjLoggedIn, setIsDjLoggedIn] = useState(false);
+            const [queue, setQueue] = useState([]);
+            const [requests, setRequests] = useState([]);
+            const [tippingInfo, setTippingInfo] = useState({ venmo: '', cashapp: '' });
+            const [showRequestModal, setShowRequestModal] = useState(false);
+            const [showLoginModal, setShowLoginModal] = useState(false);
+            const [editingItem, setEditingItem] = useState(null);
+            const [venmoUser, setVenmoUser] = useState('');
+            const [cashappUser, setCashappUser] = useState('');
+            const [tipSaveConfirm, setTipSaveConfirm] = useState(false);
+            const [confirmState, setConfirmState] = useState({ show: false, title: '', message: '', onConfirm: () => {} });
+            const [promptState, setPromptState] = useState({ show: false, title: '', message: '', onConfirm: () => {} });
+            const [showDjHistory, setShowDjHistory] = useState(false);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [votedSongs, setVotedSongs] = useState(() => {
+                const saved = localStorage.getItem('votedSongs');
+                return saved ? JSON.parse(saved) : [];
+            });
+            const [userId, setUserId] = useState(() => {
+                let id = localStorage.getItem('neonBootsUserId');
+                if (!id) {
+                    id = Math.random().toString(36).substring(2, 15);
+                    localStorage.setItem('neonBootsUserId', id);
+                }
+                return id;
+            });
+
+            useEffect(() => {
+                localStorage.setItem('votedSongs', JSON.stringify(votedSongs));
+            }, [votedSongs]);
+
+            useEffect(() => {
+                if (!db) {
+                    console.log("Firestore not initialized, skipping data fetch.");
+                    return;
+                }
+                seedInitialData();
+                const queueQuery = db.collection("queue").orderBy("order");
+                const unsubscribeQueue = queueQuery.onSnapshot(snapshot => {
+                    const queueData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    queueData.sort((a, b) => {
+                        if (a.played && !b.played) return 1;
+                        if (!a.played && b.played) return -1;
+                        return a.order - b.order;
+                    });
+                    setQueue(queueData);
                 });
+
+                const requestsQuery = db.collection("requests").orderBy("createdAt", "desc");
+                const unsubscribeRequests = requestsQuery.onSnapshot(snapshot => {
+                    setRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                });
+                
+                const tippingDoc = db.collection("settings").doc("tipping");
+                const unsubscribeTipping = tippingDoc.onSnapshot(doc => {
+                    if (doc.exists) {
+                        const data = doc.data();
+                        setTippingInfo(data); setVenmoUser(data.venmo || ''); setCashappUser(data.cashapp || '');
+                    }
+                });
+                return () => { unsubscribeQueue(); unsubscribeRequests(); unsubscribeTipping(); };
+            }, []);
+
+            const handleAddRequestToQueue = async (request, position) => {
+                if (!db) return;
+                const upcomingQueue = queue.filter(q => !q.played);
+                const order = position === 'next' ? -1 : upcomingQueue.length;
+                
+                const batch = db.batch();
+
+                if (position === 'next') {
+                    upcomingQueue.forEach(item => {
+                        const docRef = db.collection('queue').doc(item.id);
+                        batch.update(docRef, { order: item.order + 1 });
+                    });
+                }
+
+                const newDocRef = db.collection('queue').doc();
+                batch.set(newDocRef, { type: 'song', danceName: request.danceName, songName: request.songName, artist: request.artist, order: order, played: false, likes: [], dislikes: [] });
+                
+                batch.delete(db.collection('requests').doc(request.id));
+                await batch.commit();
+            };
+
+            const handleDeleteRequest = async (id) => { if (!db) return; await db.collection('requests').doc(id).delete(); };
+
+            const handleAddEventToQueue = (eventName) => {
+                setPromptState({
+                    show: true,
+                    title: `Add Event: ${eventName}`,
+                    message: 'Enter any optional notes for this event.',
+                    onConfirm: async (note) => {
+                        if (!db) return;
+                        const upcomingQueue = queue.filter(q => !q.played);
+                        await db.collection('queue').add({ type: 'event', danceName: eventName, songName: note || '', artist: '', order: upcomingQueue.length, played: false, likes: [], dislikes: [] });
+                        setPromptState({ show: false, title: '', message: '', onConfirm: () => {} });
+                    }
+                });
+            };
+
+            const handleSaveTippingInfo = async (e) => {
+                e.preventDefault();
+                if (!db) return;
+                const tipRef = db.collection("settings").doc("tipping");
+                await tipRef.set({ venmo: venmoUser, cashapp: cashappUser }, { merge: true });
                 setTipSaveConfirm(true);
                 setTimeout(() => setTipSaveConfirm(false), 2000);
-            } else {
-                console.error("Error saving tipping info:", error);
+            };
+            
+            const handleQueueReorder = useCallback(async (dragIndex, dropIndex) => {
+                if (!db) return;
+                const upcomingQueue = queue.filter(item => !item.played);
+                const newQueue = [...upcomingQueue];
+                const [draggedItem] = newQueue.splice(dragIndex, 1);
+                newQueue.splice(dropIndex, 0, draggedItem);
+                const batch = db.batch();
+                newQueue.forEach((item, index) => batch.update(db.collection('queue').doc(item.id), { order: index }));
+                await batch.commit();
+            }, [queue]);
+
+            const handleMoveQueueItem = (index, direction) => {
+                const upcomingQueue = queue.filter(item => !item.played);
+                if (direction === 'up' && index > 0) handleQueueReorder(index, index - 1);
+                else if (direction === 'down' && index < upcomingQueue.length - 1) handleQueueReorder(index, index + 1);
+            };
+            
+            const handleSaveEditedItem = async (updatedItem) => {
+                if (!db) return;
+                const { id, ...data } = updatedItem;
+                await db.collection('queue').doc(id).update(data);
+                setEditingItem(null);
+            };
+
+            const handleMarkAsPlayed = async (id) => {
+                if (!db) return;
+                await db.collection('queue').doc(id).update({ played: true });
+            };
+
+            const handleDeleteQueueItem = (id) => {
+                setConfirmState({
+                    show: true,
+                    title: 'Delete Item',
+                    message: 'Are you sure you want to permanently delete this item from the queue?',
+                    onConfirm: async () => {
+                        if (!db) return;
+                        const itemToDelete = queue.find(item => item.id === id);
+                        if (!itemToDelete) return;
+                        const batch = db.batch();
+                        batch.delete(db.collection('queue').doc(id));
+                        
+                        const upcomingQueue = queue.filter(q => !q.played && q.id !== id);
+                        upcomingQueue.forEach((item, index) => {
+                            if (item.order > itemToDelete.order) {
+                                batch.update(db.collection('queue').doc(item.id), { order: item.order - 1 });
+                            }
+                        });
+
+                        await batch.commit();
+                        setConfirmState({ show: false, title: '', message: '', onConfirm: () => {} });
+                    }
+                });
+            };
+
+            const handleVote = async (songId, voteType) => {
+                if (!db || votedSongs.includes(songId)) return;
+
+                const songRef = db.collection('queue').doc(songId);
+                const fieldToUpdate = voteType === 'like' ? 'likes' : 'dislikes';
+                
+                await songRef.update({
+                    [fieldToUpdate]: firebase.firestore.FieldValue.arrayUnion(userId)
+                });
+
+                setVotedSongs([...votedSongs, songId]);
+            };
+
+            const upcomingQueue = queue.filter(item => !item.played);
+            const recentlyPlayedQueue = queue.filter(item => item.played);
+            const filteredRequests = requests.filter(req => 
+                req.songName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                req.artist.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                req.danceName.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+
+            if (!db) {
+                return (
+                    <div className="bg-gray-900 text-white min-h-screen flex flex-col justify-center items-center">
+                        <h1 className="text-3xl text-red-500">Firebase Not Configured</h1>
+                        <p className="mt-4">This app requires a Firebase configuration to run.</p>
+                    </div>
+                );
             }
-        }
-    };
-    
-    const handleQueueReorder = useCallback(async (dragIndex, dropIndex) => {
-        if (!db) return;
-        const newQueue = [...queue];
-        const [draggedItem] = newQueue.splice(dragIndex, 1);
-        newQueue.splice(dropIndex, 0, draggedItem);
 
-        const batch = writeBatch(db);
-        newQueue.forEach((item, index) => {
-            const docRef = doc(db, 'queue', item.id);
-            batch.update(docRef, { order: index + 1 });
-        });
-        await batch.commit();
-    }, [queue]);
+            if (isDjLoggedIn) {
+                return (
+                    <div className="bg-gray-900 text-white min-h-screen p-4 md:p-8">
+                        {editingItem && <EditQueueItemModal item={editingItem} onSave={handleSaveEditedItem} onClose={() => setEditingItem(null)} />}
+                        <ConfirmModal {...confirmState} onClose={() => setConfirmState({ ...confirmState, show: false })} />
+                        <PromptModal {...promptState} onClose={() => setPromptState({ ...promptState, show: false })} />
 
-    const handleMoveQueueItem = (index, direction) => {
-        if (direction === 'up' && index > 0) {
-            handleQueueReorder(index, index - 1);
-        } else if (direction === 'down' && index < queue.length - 1) {
-            handleQueueReorder(index, index + 1);
-        }
-    };
-    
-    const handleEditQueueItem = (item) => {
-        setEditingItem(item);
-    };
-
-    const handleSaveEditedItem = async (updatedItem) => {
-        if (!db) return;
-        const { id, ...data } = updatedItem;
-        await updateDoc(doc(db, 'queue', id), data);
-        setEditingItem(null);
-    };
-
-    const handleDeleteQueueItem = async (id) => {
-        if (!db || !window.confirm("Are you sure you want to delete this item from the queue?")) return;
-        
-        const itemToDelete = queue.find(item => item.id === id);
-        if (!itemToDelete) return;
-
-        const batch = writeBatch(db);
-        const docRef = doc(db, 'queue', id);
-        batch.delete(docRef);
-
-        // Re-order subsequent items
-        queue.forEach(item => {
-            if (item.order > itemToDelete.order) {
-                const itemRef = doc(db, 'queue', item.id);
-                batch.update(itemRef, { order: item.order - 1 });
-            }
-        });
-
-        await batch.commit();
-    };
-
-    // --- Render Logic ---
-
-    if (!db) {
-        return (
-            <div className="bg-gray-900 text-white min-h-screen flex flex-col justify-center items-center">
-                <h1 className="text-3xl text-red-500">Firebase Not Configured</h1>
-                <p className="mt-4">Please replace the placeholder `firebaseConfig` in the code.</p>
-            </div>
-        );
-    }
-
-    if (isDjLoggedIn) {
-        // DJ Console View
-        return (
-            <div className="bg-gray-900 text-white min-h-screen p-4 md:p-8">
-                {editingItem && <EditQueueItemModal item={editingItem} onSave={handleSaveEditedItem} onClose={() => setEditingItem(null)} />}
-                <header className="flex justify-between items-center mb-6 pb-4 border-b-2 border-cyan-400">
-                    <h1 className="text-3xl md:text-4xl font-bold text-cyan-400">DJ Console</h1>
-                    <button onClick={() => setIsDjLoggedIn(false)} className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg">Logout</button>
-                </header>
-                <div className="flex flex-col lg:flex-row gap-8">
-                    {/* Left Column */}
-                    <div className="lg:w-1/2 flex flex-col gap-6">
-                        {/* Common Events */}
-                        <div>
-                            <h3 className="text-2xl font-semibold text-pink-400 mb-3">Common Events</h3>
-                            <div className="grid grid-cols-2 gap-3">
-                                {['Line Dance Lesson', 'Couples Dance', 'Last Call', 'Closing Time'].map(event => (
-                                    <button key={event} onClick={() => handleAddEventToQueue(event)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold p-3 rounded-lg text-center">{event}</button>
-                                ))}
-                            </div>
-                        </div>
-                        {/* Submitted Requests */}
-                        <div>
-                            <h3 className="text-2xl font-semibold text-pink-400 mb-3">Submitted Requests ({requests.length})</h3>
-                            <div className="bg-gray-800 p-4 rounded-lg max-h-96 overflow-y-auto space-y-3">
-                                {requests.length > 0 ? requests.map(req => (
-                                    <div key={req.id} className="bg-gray-700 p-3 rounded-lg">
-                                        <p><span className="font-bold text-cyan-300">{req.danceName}</span> - <span className="text-gray-300">{req.songName}</span> by <span className="italic text-gray-400">{req.artist}</span></p>
-                                        <p className="text-sm text-gray-500">From: {req.customerName}</p>
-                                        {req.spotifyLink && <a href={req.spotifyLink} target="_blank" rel="noopener noreferrer" className="text-green-400 text-sm hover:underline">Spotify Link</a>}
-                                        <div className="flex gap-2 mt-2">
-                                            <button onClick={() => handleAddRequestToQueue(req, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded">Add Next</button>
-                                            <button onClick={() => handleAddRequestToQueue(req, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded">Add Last</button>
-                                            <button onClick={() => handleDeleteRequest(req.id)} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded">Delete</button>
-                                        </div>
+                        <header className="flex justify-between items-center mb-6 pb-4 border-b-2 border-cyan-400">
+                            <h1 className="text-3xl md:text-4xl font-bold text-cyan-400">DJ Console</h1>
+                            <button onClick={() => setIsDjLoggedIn(false)} className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg">Logout</button>
+                        </header>
+                        <div className="flex flex-col lg:flex-row gap-8">
+                            <div className="lg:w-1/2 flex flex-col gap-6">
+                                <div>
+                                    <h3 className="text-2xl font-semibold text-pink-400 mb-3">Common Events</h3>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {['Line Dance Lesson', 'Couples Dance', 'Last Call', 'Closing Time'].map(event => (
+                                            <button key={event} onClick={() => handleAddEventToQueue(event)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold p-3 rounded-lg text-center">{event}</button>
+                                        ))}
                                     </div>
-                                )) : <p className="text-gray-400">No pending requests.</p>}
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-semibold text-pink-400 mb-3">Submitted Requests ({filteredRequests.length})</h3>
+                                    <input 
+                                        type="text"
+                                        placeholder="Search requests..."
+                                        value={searchTerm}
+                                        onChange={e => setSearchTerm(e.target.value)}
+                                        className="w-full p-2 mb-3 bg-gray-700 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                                    />
+                                    <div className="bg-gray-800 p-4 rounded-lg max-h-96 overflow-y-auto space-y-3">
+                                        {filteredRequests.length > 0 ? filteredRequests.map(req => (
+                                            <div key={req.id} className="bg-gray-700 p-3 rounded-lg">
+                                                <p><span className="font-bold text-cyan-300">{req.danceName}</span> - <span className="text-gray-300">{req.songName}</span> by <span className="italic text-gray-400">{req.artist}</span></p>
+                                                <p className="text-sm text-gray-500">From: {req.customerName}</p>
+                                                {req.spotifyLink && <a href={req.spotifyLink} target="_blank" rel="noopener noreferrer" className="text-green-400 text-sm hover:underline">Spotify Link</a>}
+                                                <div className="flex gap-2 mt-2">
+                                                    <button onClick={() => handleAddRequestToQueue(req, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded">Add Next</button>
+                                                    <button onClick={() => handleAddRequestToQueue(req, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded">Add Last</button>
+                                                    <button onClick={() => handleDeleteRequest(req.id)} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded">Delete</button>
+                                                </div>
+                                            </div>
+                                        )) : <p className="text-gray-400">No matching requests.</p>}
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-semibold text-pink-400 mb-3">Tipping Links</h3>
+                                    <form onSubmit={handleSaveTippingInfo} className="bg-gray-800 p-4 rounded-lg space-y-3">
+                                        <input type="text" value={venmoUser} onChange={e => setVenmoUser(e.target.value)} placeholder="Venmo Username" className="w-full p-2 bg-gray-700 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+                                        <input type="text" value={cashappUser} onChange={e => setCashappUser(e.target.value)} placeholder="Cash App $Cashtag" className="w-full p-2 bg-gray-700 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+                                        <div className="flex items-center gap-4">
+                                            <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg">Save Tips</button>
+                                            {tipSaveConfirm && <span className="text-green-400 text-2xl">✔️</span>}
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            <div className="lg:w-1/2">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h3 className="text-2xl font-semibold text-pink-400">{showDjHistory ? 'Played History' : 'Live Dance Queue'}</h3>
+                                    <button onClick={() => setShowDjHistory(!showDjHistory)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold py-1 px-3 rounded-lg text-sm">
+                                        {showDjHistory ? 'View Queue' : 'View History'}
+                                    </button>
+                                </div>
+                                <div className="bg-gray-800 p-4 rounded-lg min-h-[50vh]">
+                                    {showDjHistory ? (
+                                        <QueueList queue={recentlyPlayedQueue} isDjView={true} title="History" />
+                                    ) : (
+                                        <QueueList queue={upcomingQueue} isDjView={true} onReorder={handleQueueReorder} onEdit={setEditingItem} onDelete={handleDeleteQueueItem} onMove={handleMoveQueueItem} onMarkAsPlayed={handleMarkAsPlayed} title="Queue" isUpcomingQueue={true} />
+                                    )}
+                                </div>
                             </div>
                         </div>
-                        {/* Tipping Links */}
-                         <div>
-                            <h3 className="text-2xl font-semibold text-pink-400 mb-3">Tipping Links</h3>
-                            <form onSubmit={handleSaveTippingInfo} className="bg-gray-800 p-4 rounded-lg space-y-3">
-                                <input type="text" value={venmoUser} onChange={e => setVenmoUser(e.target.value)} placeholder="Venmo Username" className="w-full p-2 bg-gray-700 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400" />
-                                <input type="text" value={cashappUser} onChange={e => setCashappUser(e.target.value)} placeholder="Cash App $Cashtag" className="w-full p-2 bg-gray-700 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400" />
-                                <div className="flex items-center gap-4">
-                                    <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg">Save Tips</button>
-                                    {tipSaveConfirm && <span className="text-green-400 text-2xl">✔️</span>}
+                    </div>
+                );
+            }
+
+            return (
+                <div className="container mx-auto p-4 md:p-8">
+                    <Modal show={showRequestModal} onClose={() => setShowRequestModal(false)} title="Submit a Song Request">
+                        <RequestForm onClose={() => setShowRequestModal(false)} tippingInfo={tippingInfo} />
+                    </Modal>
+                    <Modal show={showLoginModal} onClose={() => setShowLoginModal(false)} title="DJ Login">
+                        <DJLogin onLogin={() => { setIsDjLoggedIn(true); setShowLoginModal(false); }} />
+                    </Modal>
+                    <header className="text-center mb-8">
+                        <h1 className="text-7xl md:text-8xl font-neon" style={{ color: '#ff00ff' }}>
+                            Neon Boots
+                        </h1>
+                        <p className="text-cyan-300 text-lg mt-2">Houston's Premier Country & Western Dance Club</p>
+                        <div className="flex justify-center gap-4 mt-6">
+                            <a href="https://www.neonbootsclub.com/" target="_blank" rel="noopener noreferrer" className="bg-transparent border-2 border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-gray-900 font-bold py-2 px-6 rounded-lg transition-colors">
+                                Visit Website
+                            </a>
+                            <button onClick={() => setShowRequestModal(true)} className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-6 rounded-lg transition-colors">
+                                Submit a Request
+                            </button>
+                        </div>
+                    </header>
+                    <main>
+                        <h2 className="text-3xl font-bold text-center text-cyan-400 mb-4">Live Dance Queue</h2>
+                        <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
+                            <QueueList queue={upcomingQueue} isDjView={false} title="Queue" isUpcomingQueue={true} onVote={handleVote} votedSongs={votedSongs} />
+                        </div>
+
+                        {recentlyPlayedQueue.length > 0 && (
+                            <div className="mt-12">
+                                <h2 className="text-3xl font-bold text-center text-cyan-400 mb-4">Recently Played</h2>
+                                <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
+                                    <QueueList queue={recentlyPlayedQueue} isDjView={false} title="Recently Played" onVote={handleVote} votedSongs={votedSongs} />
                                 </div>
-                            </form>
-                        </div>
-                    </div>
-                    {/* Right Column */}
-                    <div className="lg:w-1/2">
-                        <h3 className="text-2xl font-semibold text-pink-400 mb-3">Live Dance Queue (Drag to Reorder)</h3>
-                        <div className="bg-gray-800 p-4 rounded-lg min-h-[50vh]">
-                            <QueueList queue={queue} isDjView={true} onReorder={handleQueueReorder} onEdit={handleEditQueueItem} onDelete={handleDeleteQueueItem} onMove={handleMoveQueueItem} />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // Customer Facing View
-    return (
-        <div className="bg-gray-900 text-white min-h-screen">
-            <Modal show={showRequestModal} onClose={() => setShowRequestModal(false)} title="Submit a Song Request">
-                <RequestForm onClose={() => setShowRequestModal(false)} tippingInfo={tippingInfo} />
-            </Modal>
-            <Modal show={showLoginModal} onClose={() => setShowLoginModal(false)} title="DJ Login">
-                <DJLogin onLogin={() => { setIsDjLoggedIn(true); setShowLoginModal(false); }} onClose={() => setShowLoginModal(false)} />
-            </Modal>
-
-            <div className="container mx-auto p-4 md:p-8">
-                <header className="text-center mb-8">
-                    <h1 className="text-5xl md:text-7xl font-extrabold" style={{ fontFamily: "'Brush Script MT', cursive", color: '#ff00ff' }}>
-                        Neon Boots
-                    </h1>
-                    <p className="text-cyan-300 text-lg">Houston's Premier Country & Western Dance Club</p>
-                    <div className="flex justify-center gap-4 mt-6">
-                        <a href="https://www.neonbootsclub.com/" target="_blank" rel="noopener noreferrer" className="bg-transparent border-2 border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-gray-900 font-bold py-2 px-6 rounded-lg transition-colors">
-                            Visit Website
-                        </a>
-                        <button onClick={() => setShowRequestModal(true)} className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-6 rounded-lg transition-colors">
-                            Submit a Request
+                            </div>
+                        )}
+                    </main>
+                    <footer className="text-center mt-8 pt-4 border-t border-gray-700">
+                        <button onClick={() => setShowLoginModal(true)} className="text-gray-500 hover:text-cyan-300 transition-colors">
+                            DJ Login
                         </button>
-                    </div>
-                </header>
+                    </footer>
+                </div>
+            );
+        };
 
-                <main>
-                    <h2 className="text-3xl font-bold text-center text-cyan-400 mb-4">Live Dance Queue</h2>
-                    <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
-                        <QueueList queue={queue} isDjView={false} />
-                    </div>
-                </main>
-
-                <footer className="text-center mt-8 pt-4 border-t border-gray-700">
-                    <button onClick={() => setShowLoginModal(true)} className="text-gray-500 hover:text-cyan-300 transition-colors">
-                        DJ Login
-                    </button>
-                </footer>
-            </div>
-        </div>
-    );
-}
+        // Render the main App component into the 'root' div
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
