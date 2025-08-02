@@ -41,6 +41,15 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .user-id-text {
+            word-break: break-all;
+        }
+        .neon-pink-bg {
+            background-color: #ff00ff;
+        }
+        .neon-glow {
+            box-shadow: 0 0 5px #ff00ff, 0 0 10px #ff00ff;
+        }
     </style>
 </head>
 <body class="bg-gray-900">
@@ -59,12 +68,13 @@
     <!-- React Application Code -->
     <script type="text/babel">
         // Since we're not using a bundler, we get React functions from the global 'React' object
-        const { useState, useEffect, useRef, useCallback } = React;
+        const { useState, useEffect, useRef, useCallback, createContext, useContext } = React;
         
         // --- Gemini API Configuration ---
         const GEMINI_API_KEY = "AIzaSyAipdQBpb0NXceFo4pQKp5Tb6LzytS_xbI";
 
         // --- Firebase Configuration ---
+        // DO NOT MODIFY THESE. They are provided by the Canvas environment.
         const firebaseConfig = {
             apiKey: "AIzaSyBKmzMtCnEWIFEiq6WK6f1E4JTCkC2tnt0",
             authDomain: "neonbootsdjapp.firebaseapp.com",
@@ -74,6 +84,8 @@
             appId: "1:916767461225:web:aa07f19c1719cba8d837f8",
             measurementId: "G-P1KDRD91W3"
         };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
 
         // --- Initialize Firebase (Compat Syntax) ---
         let app;
@@ -549,7 +561,7 @@
                                                 ({item.danceName})
                                             </p>
                                             {item.stepSheetUrl && (
-                                                <a href={item.stepSheetUrl} target="_blank" rel="noopener noreferrer" title="View Step Sheet" className="bg-purple-600 text-white text-xs font-semibold px-2 py-0.5 rounded-md hover:bg-purple-700">
+                                                <a href={item.stepSheetUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white text-xs font-semibold px-2 py-0.5 rounded-md hover:bg-purple-700">
                                                     step sheet
                                                 </a>
                                             )}
@@ -766,96 +778,708 @@
             );
         };
 
-        const ManageLineDancesPanel = ({ lineDances, onClose }) => {
+        // UI for adding/editing a dance
+        const DanceForm = ({ danceToEdit, onSave, onClose }) => {
+            const [danceData, setDanceData] = useState(danceToEdit || {
+                danceName: '',
+                songTitle: '',
+                songArtist: '',
+                stepSheetLink: '',
+                difficulty: 'Beginner',
+                isBeginnerFriendly: false,
+            });
+
+            const handleChange = (e) => {
+                const { name, value, type, checked } = e.target;
+                setDanceData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+            };
+
+            const handleSubmit = (e) => onSave(e, danceData);
+
+            return (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-cyan-300">Dance Name</label>
+                        <input type="text" name="danceName" value={danceData.danceName} onChange={handleChange} required className="mt-1 block w-full rounded-md bg-gray-700 text-white border-gray-600 shadow-sm focus:border-cyan-400 focus:ring focus:ring-cyan-400 focus:ring-opacity-50" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-cyan-300">Song Title</label>
+                        <input type="text" name="songTitle" value={danceData.songTitle} onChange={handleChange} className="mt-1 block w-full rounded-md bg-gray-700 text-white border-gray-600 shadow-sm focus:border-cyan-400 focus:ring focus:ring-cyan-400 focus:ring-opacity-50" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-cyan-300">Song Artist</label>
+                        <input type="text" name="songArtist" value={danceData.songArtist} onChange={handleChange} className="mt-1 block w-full rounded-md bg-gray-700 text-white border-gray-600 shadow-sm focus:border-cyan-400 focus:ring focus:ring-cyan-400 focus:ring-opacity-50" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-cyan-300">Step Sheet Link</label>
+                        <input type="url" name="stepSheetLink" value={danceData.stepSheetLink} onChange={handleChange} className="mt-1 block w-full rounded-md bg-gray-700 text-white border-gray-600 shadow-sm focus:border-cyan-400 focus:ring focus:ring-cyan-400 focus:ring-opacity-50" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-cyan-300">Difficulty</label>
+                        <select name="difficulty" value={danceData.difficulty} onChange={handleChange} className="mt-1 block w-full rounded-md bg-gray-700 text-white border-gray-600 shadow-sm focus:border-cyan-400 focus:ring focus:ring-cyan-400 focus:ring-opacity-50">
+                            <option value="Beginner">Beginner</option>
+                            <option value="Improver">Improver</option>
+                            <option value="Intermediate">Intermediate</option>
+                            <option value="Advanced">Advanced</option>
+                        </select>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <input type="checkbox" id="isBeginnerFriendly" name="isBeginnerFriendly" checked={danceData.isBeginnerFriendly} onChange={handleChange} className="form-checkbox text-blue-500 bg-gray-700 rounded-md focus:ring-cyan-400" />
+                        <label htmlFor="isBeginnerFriendly" className="text-sm font-medium text-cyan-300">Beginner Friendly</label>
+                    </div>
+                    <div className="flex justify-end space-x-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-white bg-gray-600 rounded-lg hover:bg-gray-700">Cancel</button>
+                        <button type="submit" className="px-4 py-2 text-gray-900 bg-cyan-500 rounded-lg hover:bg-cyan-600">Save</button>
+                    </div>
+                </form>
+            );
+        };
+
+        // --- Main Line Dance Management Component ---
+        const LineDanceManagement = ({ onClose, onAddDanceToQueue }) => {
+            const [lineDances, setLineDances] = useState([]);
+            const [queue, setQueue] = useState([]);
+            const [searchTerm, setSearchTerm] = useState('');
             const [editingDance, setEditingDance] = useState(null);
-            const [newDanceName, setNewDanceName] = useState('');
-            const [newDanceSong, setNewDanceSong] = useState('');
-            const [newDanceArtist, setNewDanceArtist] = useState('');
-            const [newStepSheetUrl, setNewStepSheetUrl] = useState('');
+            const [isModalOpen, setIsModalOpen] = useState(false);
             const [confirmDelete, setConfirmDelete] = useState(null);
+            const [importDataModalOpen, setImportDataModalOpen] = useState(false);
+            const [isLoading, setIsLoading] = useState(true);
+            const [importing, setImporting] = useState(false);
+            const [importText, setImportText] = useState('');
+            const [viewMode, setViewMode] = useState('table'); // 'table' or 'card'
+            const [sortBy, setSortBy] = useState({ field: 'danceName', direction: 'asc' });
+            const [showBeginnerFriendlyOnly, setShowBeginnerFriendlyOnly] = useState(false);
+            const [selectedDances, setSelectedDances] = useState(new Set());
+            const [confirmBulkDelete, setConfirmBulkDelete] = useState(null);
+            const [bulkEditMode, setBulkEditMode] = useState(false);
+            const [editedDances, setEditedDances] = useState({});
 
-            const handleAddNewDance = async (e) => {
-                e.preventDefault();
-                if (!newDanceName || !db) return;
-                await db.collection('line_dances').add({ name: newDanceName, song: newDanceSong, artist: newDanceArtist, stepSheetUrl: newStepSheetUrl });
-                setNewDanceName('');
-                setNewDanceSong('');
-                setNewDanceArtist('');
-                setNewStepSheetUrl('');
-            };
+            const lineDancesCollectionPath = `artifacts/${appId}/public/data/line_dances`;
+            const queueCollectionPath = `artifacts/${appId}/public/data/queue`;
 
-            const handleUpdateDance = async (dance) => {
+            // Fetch data from Firestore
+            useEffect(() => {
                 if (!db) return;
-                const { id, ...data } = dance;
-                await db.collection('line_dances').doc(id).update(data);
-                setEditingDance(null);
+
+                const unsubscribeDances = db.collection(lineDancesCollectionPath).onSnapshot(snapshot => {
+                    const dances = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setLineDances(dances);
+                    setIsLoading(false);
+                }, (error) => {
+                    console.error("Error fetching line dances:", error);
+                    setIsLoading(false);
+                });
+
+                const unsubscribeQueue = db.collection(queueCollectionPath).onSnapshot(snapshot => {
+                    const queueData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    queueData.sort((a, b) => a.order - b.order);
+                    setQueue(queueData);
+                }, (error) => {
+                    console.error("Error fetching queue:", error);
+                });
+
+                return () => {
+                    unsubscribeDances();
+                    unsubscribeQueue();
+                };
+            }, []);
+
+            // Handle form submission for adding or editing a dance
+            const handleSaveDance = async (e, danceData) => {
+                e.preventDefault();
+                if (!db || !danceData.danceName) return;
+
+                try {
+                    if (editingDance) {
+                        await db.collection(lineDancesCollectionPath).doc(editingDance.id).update(danceData);
+                    } else {
+                        await db.collection(lineDancesCollectionPath).add(danceData);
+                    }
+                    setIsModalOpen(false);
+                    setEditingDance(null);
+                } catch (error) {
+                    console.error("Error saving dance:", error);
+                }
+            };
+            
+            // Save all bulk edits
+            const handleSaveBulkEdits = async () => {
+                if (!db || Object.keys(editedDances).length === 0) return;
+
+                const batch = db.batch();
+                Object.keys(editedDances).forEach(id => {
+                    const danceRef = db.collection(lineDancesCollectionPath).doc(id);
+                    batch.update(danceRef, editedDances[id]);
+                });
+                
+                try {
+                    await batch.commit();
+                    setEditedDances({});
+                    setBulkEditMode(false);
+                } catch (error) {
+                    console.error("Error saving bulk edits:", error);
+                }
             };
 
+            // Handle deletion of a single dance
             const handleDeleteDance = async (id) => {
                 if (!db) return;
-                await db.collection('line_dances').doc(id).delete();
-                setConfirmDelete(null);
+                try {
+                    await db.collection(lineDancesCollectionPath).doc(id).delete();
+                    setConfirmDelete(null);
+                } catch (error) {
+                    console.error("Error deleting dance:", error);
+                }
+            };
+            
+            // Handle bulk deletion
+            const handleBulkDelete = async () => {
+                if (!db || !confirmBulkDelete) return;
+
+                const batch = db.batch();
+                
+                if (confirmBulkDelete.type === 'selected') {
+                    selectedDances.forEach(id => {
+                        batch.delete(db.collection(lineDancesCollectionPath).doc(id));
+                    });
+                } else if (confirmBulkDelete.type === 'all') {
+                    const allDances = await db.collection(lineDancesCollectionPath).get();
+                    allDances.forEach(d => {
+                        batch.delete(d.ref);
+                    });
+                }
+                
+                try {
+                    await batch.commit();
+                    setSelectedDances(new Set());
+                    setConfirmBulkDelete(null);
+                } catch (error) {
+                    console.error("Error performing bulk delete:", error);
+                }
+            };
+
+            // Handle bulk import from TSV data
+            const handleBulkImport = async () => {
+                if (!db || !importText) return;
+                setImporting(true);
+
+                const lines = importText.split('\n').filter(line => line.trim() !== '');
+                if (lines.length <= 1) {
+                    setImporting(false);
+                    return;
+                }
+
+                const headers = lines[0].split('\t').map(h => h.trim());
+                const dataRows = lines.slice(1);
+                const batch = db.batch();
+
+                const headerMap = {
+                    'Dance': 'danceName',
+                    'Level': 'difficulty',
+                    'Song': 'songTitle',
+                    'URL': 'stepSheetLink',
+                };
+
+                dataRows.forEach((row) => {
+                    const values = row.split('\t').map(v => v.trim());
+                    const newDance = { isBeginnerFriendly: false };
+
+                    headers.forEach((header, i) => {
+                        const key = headerMap[header];
+                        if (key && values[i]) {
+                            newDance[key] = values[i];
+                        }
+                    });
+
+                    if (newDance.songTitle) {
+                        const match = newDance.songTitle.match(/^"(.*?)"\s*(.*)$/);
+                        if (match) {
+                            newDance.songTitle = match[1].trim();
+                            newDance.songArtist = match[2].trim();
+                        } else {
+                            newDance.songArtist = '';
+                        }
+                    }
+                    
+                    if (newDance.danceName) {
+                        const newDocRef = db.collection(lineDancesCollectionPath).doc();
+                        batch.set(newDocRef, newDance);
+                    }
+                });
+
+                try {
+                    await batch.commit();
+                    setImportText('');
+                    setImportDataModalOpen(false);
+                } catch (error) {
+                    console.error("Error performing bulk import:", error);
+                } finally {
+                    setImporting(false);
+                }
+            };
+            
+            // Toggle the "Beginner Friendly" status of a dance
+            const handleToggleBeginnerFriendly = async (dance) => {
+                if (!db) return;
+                const danceRef = db.collection(lineDancesCollectionPath).doc(dance.id);
+                await danceRef.update({ isBeginnerFriendly: !dance.isBeginnerFriendly });
+            };
+
+            const handleBulkToggleBeginnerFriendly = (dance) => {
+                setEditedDances(prev => ({
+                    ...prev,
+                    [dance.id]: {
+                        ...prev[dance.id],
+                        isBeginnerFriendly: !dance.isBeginnerFriendly
+                    }
+                }));
+            };
+            
+            // Toggle checkbox for multi-select
+            const handleSelectDance = (id) => {
+                setSelectedDances(prev => {
+                    const newSelected = new Set(prev);
+                    if (newSelected.has(id)) {
+                        newSelected.delete(id);
+                    } else {
+                        newSelected.add(id);
+                    }
+                    return newSelected;
+                });
+            };
+            
+            // Select all dances
+            const handleSelectAll = () => {
+                if (selectedDances.size === displayedDances.length) {
+                    setSelectedDances(new Set());
+                } else {
+                    const allIds = new Set(displayedDances.map(d => d.id));
+                    setSelectedDances(allIds);
+                }
+            };
+            
+            const handleBulkEditChange = (id, field, value) => {
+                const dance = lineDances.find(d => d.id === id);
+                if (dance[field] !== value) {
+                     setEditedDances(prev => ({
+                        ...prev,
+                        [id]: {
+                            ...prev[id],
+                            [field]: value
+                        }
+                    }));
+                } else {
+                    // Remove from editedDances if reverted to original value
+                    setEditedDances(prev => {
+                        const newEdits = { ...prev };
+                        delete newEdits[id];
+                        return newEdits;
+                    });
+                }
+            };
+
+            // Sort and filter dances
+            const sortedAndFilteredDances = useCallback(() => {
+                let dances = [...lineDances];
+
+                if (searchTerm) {
+                    dances = dances.filter(dance => 
+                        dance.danceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        dance.songTitle?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        dance.songArtist?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        dance.difficulty?.toLowerCase().includes(searchTerm.toLowerCase())
+                    );
+                }
+                
+                if (showBeginnerFriendlyOnly) {
+                    dances = dances.filter(dance => dance.isBeginnerFriendly);
+                }
+
+                dances.sort((a, b) => {
+                    const aValue = a[sortBy.field]?.toLowerCase() || '';
+                    const bValue = b[sortBy.field]?.toLowerCase() || '';
+                    
+                    if (aValue < bValue) return sortBy.direction === 'asc' ? -1 : 1;
+                    if (aValue > bValue) return sortBy.direction === 'asc' ? 1 : -1;
+                    return 0;
+                });
+
+                return dances;
+            }, [lineDances, searchTerm, sortBy, showBeginnerFriendlyOnly]);
+            
+            const displayedDances = sortedAndFilteredDances();
+
+            const handleSortChange = (e) => {
+                const newField = e.target.value;
+                setSortBy(prev => ({
+                    field: newField,
+                    direction: prev.field === newField ? (prev.direction === 'asc' ? 'desc' : 'asc') : 'asc'
+                }));
             };
 
             return (
-                <div className="bg-gray-900 text-white min-h-screen p-4 md:p-8">
-                    {confirmDelete && <ConfirmModal show={true} onClose={() => setConfirmDelete(null)} onConfirm={() => handleDeleteDance(confirmDelete.id)} title="Delete Line Dance" message={`Are you sure you want to delete ${confirmDelete.name}? This action cannot be undone.`} />}
-                    {editingDance && (
-                        <Modal show={true} onClose={() => setEditingDance(null)} title={`Edit Dance: ${editingDance.name}`}>
-                            <form onSubmit={(e) => { e.preventDefault(); handleUpdateDance(editingDance); }}>
-                                <div className="mb-4">
-                                    <label className="block text-cyan-300 text-sm font-bold mb-2">Dance Name</label>
-                                    <input type="text" value={editingDance.name} onChange={e => setEditingDance({...editingDance, name: e.target.value})} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white" />
-                                </div>
-                                <div className="mb-4">
-                                    <label className="block text-cyan-300 text-sm font-bold mb-2">Song</label>
-                                    <input type="text" value={editingDance.song} onChange={e => setEditingDance({...editingDance, song: e.target.value})} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white" />
-                                </div>
-                                <div className="mb-4">
-                                    <label className="block text-cyan-300 text-sm font-bold mb-2">Artist</label>
-                                    <input type="text" value={editingDance.artist} onChange={e => setEditingDance({...editingDance, artist: e.target.value})} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white" />
-                                </div>
-                                <div className="mb-4">
-                                    <label className="block text-cyan-300 text-sm font-bold mb-2">Step Sheet URL</label>
-                                    <input type="url" value={editingDance.stepSheetUrl} onChange={e => setEditingDance({...editingDance, stepSheetUrl: e.target.value})} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white" />
-                                </div>
-                                <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg w-full">Save Changes</button>
-                            </form>
-                        </Modal>
-                    )}
+                <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+                    <style>{`
+                        .loader {
+                            border: 4px solid #f3f3f3;
+                            border-top: 4px solid #3498db;
+                            border-radius: 50%;
+                            width: 24px;
+                            height: 24px;
+                            animation: spin 1s linear infinite;
+                        }
+                        @keyframes spin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                        }
+                        .user-id-text {
+                            word-break: break-all;
+                        }
+                        .neon-pink-bg {
+                            background-color: #ff00ff;
+                        }
+                        .neon-glow {
+                            box-shadow: 0 0 5px #ff00ff, 0 0 10px #ff00ff;
+                        }
+                    `}</style>
+                    
+                    {/* Confirmation Modal for single delete */}
+                    <Modal show={confirmDelete} onClose={() => setConfirmDelete(null)} title="Confirm Deletion">
+                        <p className="text-gray-300 mb-4">Are you sure you want to delete the dance "{confirmDelete?.danceName}"? This action cannot be undone.</p>
+                        <div className="flex justify-end space-x-2">
+                            <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-white bg-gray-600 rounded-lg hover:bg-gray-700">Cancel</button>
+                            <button onClick={() => handleDeleteDance(confirmDelete.id)} className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700">Delete</button>
+                        </div>
+                    </Modal>
+                    
+                    {/* Confirmation Modal for bulk delete */}
+                    <Modal show={confirmBulkDelete} onClose={() => setConfirmBulkDelete(null)} title="Confirm Bulk Deletion">
+                        <p className="text-gray-300 mb-4">
+                            {confirmBulkDelete?.type === 'selected' 
+                                ? `Are you sure you want to delete ${selectedDances.size} selected dance(s)?`
+                                : `Are you sure you want to delete ALL (${lineDances.length}) dances?`}
+                             This action cannot be undone.
+                        </p>
+                        <div className="flex justify-end space-x-2">
+                            <button onClick={() => setConfirmBulkDelete(null)} className="px-4 py-2 text-white bg-gray-600 rounded-lg hover:bg-gray-700">Cancel</button>
+                            <button onClick={handleBulkDelete} className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700">Delete</button>
+                        </div>
+                    </Modal>
+
+                    {/* Add/Edit Modal */}
+                    <Modal show={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingDance(null); }} title={editingDance ? "Edit Line Dance" : "Add New Line Dance"}>
+                        <DanceForm danceToEdit={editingDance} onSave={handleSaveDance} onClose={() => { setIsModalOpen(false); setEditingDance(null); }}/>
+                    </Modal>
+
+                    {/* Bulk Import Modal */}
+                    <Modal show={importDataModalOpen} onClose={() => setImportDataModalOpen(false)} title="Import Data from TSV">
+                        <p className="text-gray-300 mb-4">Paste your tab-separated data here. The first row should contain the headers: "Dance", "Level", "Song", "URL".</p>
+                        <textarea 
+                            value={importText} 
+                            onChange={(e) => setImportText(e.target.value)} 
+                            placeholder="Dance&#9;Level&#9;Song&#9;URL" 
+                            className="w-full h-48 p-2 rounded-md bg-gray-700 text-white border-gray-600 focus:outline-none focus:ring focus:ring-cyan-400 focus:ring-opacity-50"
+                        ></textarea>
+                        <div className="flex justify-end mt-4">
+                            <button onClick={handleBulkImport} disabled={importing} className="px-4 py-2 text-gray-900 bg-cyan-500 rounded-lg hover:bg-cyan-600 disabled:opacity-50 flex items-center gap-2">
+                                {importing && <div className="loader"></div>}
+                                Import Data
+                            </button>
+                        </div>
+                    </Modal>
+
+                    {/* Main UI */}
                     <header className="flex justify-between items-center mb-6 pb-4 border-b-2 border-purple-400">
-                        <h1 className="text-3xl md:text-4xl font-bold text-purple-400">Manage Line Dances</h1>
+                        <h1 className="text-3xl font-bold text-purple-400">Line Dance Management</h1>
                         <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Back to Console</button>
                     </header>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div>
-                            <h2 className="text-2xl font-semibold text-pink-400 mb-4">Add New Line Dance</h2>
-                            <form onSubmit={handleAddNewDance} className="bg-gray-800 p-4 rounded-lg space-y-4">
-                                <input type="text" value={newDanceName} onChange={e => setNewDanceName(e.target.value)} placeholder="Dance Name" required className="w-full p-2 bg-gray-700 rounded border border-gray-600" />
-                                <input type="text" value={newDanceSong} onChange={e => setNewDanceSong(e.target.value)} placeholder="Default Song Name" className="w-full p-2 bg-gray-700 rounded border border-gray-600" />
-                                <input type="text" value={newDanceArtist} onChange={e => setNewDanceArtist(e.target.value)} placeholder="Default Artist" className="w-full p-2 bg-gray-700 rounded border border-gray-600" />
-                                <input type="url" value={newStepSheetUrl} onChange={e => setNewStepSheetUrl(e.target.value)} placeholder="Step Sheet URL" className="w-full p-2 bg-gray-700 rounded border border-gray-600" />
-                                <button type="submit" className="w-full bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg">Add Dance</button>
-                            </form>
+
+                    <div className="flex flex-col sm:flex-row flex-wrap justify-between items-center mb-6 gap-2">
+                        <input 
+                            type="text" 
+                            placeholder="Search dances..." 
+                            value={searchTerm} 
+                            onChange={(e) => setSearchTerm(e.target.value)} 
+                            className="w-full sm:w-1/3 p-3 rounded-md bg-gray-700 text-white border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400 order-1" 
+                        />
+                        <div className="flex items-center space-x-2 flex-wrap order-2">
+                            <label htmlFor="sort-by" className="text-gray-400 text-sm">Sort by:</label>
+                            <select id="sort-by" value={sortBy.field} onChange={handleSortChange} className="p-2 rounded-md bg-gray-700 text-white border-gray-600">
+                                <option value="danceName">Dance Name</option>
+                                <option value="songTitle">Song Title</option>
+                                <option value="songArtist">Song Artist</option>
+                                <option value="difficulty">Difficulty</option>
+                            </select>
+                            <button onClick={() => setSortBy(prev => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))} className="p-2 text-white bg-gray-600 rounded-lg hover:bg-gray-700">
+                                {sortBy.direction === 'asc' ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                    </svg>
+                                )}
+                            </button>
+                            <button onClick={() => setShowBeginnerFriendlyOnly(prev => !prev)} 
+                                    className={`p-2 rounded-full transition-colors font-bold w-10 h-10 flex items-center justify-center 
+                                        ${showBeginnerFriendlyOnly ? 'neon-pink-bg text-white neon-glow' : 'bg-gray-700 text-gray-400 border-2 border-gray-600'}`}
+                                    title="Filter by Beginner Friendly">
+                                B
+                            </button>
+                            <button onClick={() => setViewMode(viewMode === 'table' ? 'card' : 'table')} className="p-2 text-white bg-gray-600 rounded-lg hover:bg-gray-700">
+                                {viewMode === 'table' ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M10 3a1 1 0 00-1 1v2a1 1 0 002 0V4a1 1 0 00-1-1z" />
+                                        <path fillRule="evenodd" d="M4 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1H4zm1 2h10v2H5V5zm0 4h10v2H5V9zm0 4h10v2H5v-2z" clipRule="evenodd" />
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM13 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2h-2zM13 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2h-2z" />
+                                    </svg>
+                                )}
+                            </button>
+                            <button onClick={() => setImportDataModalOpen(true)} className="px-4 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700">
+                                Import TSV
+                            </button>
+                            <button onClick={() => setIsModalOpen(true)} className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                                Add New Dance
+                            </button>
                         </div>
-                        <div>
-                            <h2 className="text-2xl font-semibold text-pink-400 mb-4">Manage Dances</h2>
-                            <div className="space-y-3">
-                                {lineDances.map(dance => (
-                                    <div key={dance.id} className="bg-gray-800 p-3 rounded-lg flex justify-between items-center">
-                                        <div>
-                                            <p className="font-bold text-lg text-cyan-300">{dance.name}</p>
-                                            <p className="text-sm text-gray-400">{dance.song} by {dance.artist}</p>
-                                            {dance.stepSheetUrl && <a href={dance.stepSheetUrl} target="_blank" rel="noopener noreferrer" className="text-purple-400 text-xs hover:underline">Step Sheet Link</a>}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => setEditingDance(dance)} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-3 rounded text-sm">Edit</button>
-                                            <button onClick={() => setConfirmDelete(dance)} className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm">Delete</button>
-                                        </div>
-                                    </div>
-                                ))}
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mb-4">
+                        <button onClick={() => setBulkEditMode(prev => !prev)} className={`px-4 py-2 font-bold rounded-lg transition-colors ${bulkEditMode ? 'bg-cyan-500 text-gray-900 hover:bg-cyan-600' : 'bg-gray-600 text-white hover:bg-gray-700'}`}>
+                            {bulkEditMode ? 'Exit Bulk Edit' : 'Toggle Bulk Edit Mode'}
+                        </button>
+                        {bulkEditMode && (
+                            <>
+                                <button onClick={handleSaveBulkEdits} disabled={Object.keys(editedDances).length === 0} className="px-4 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50">
+                                    Save Changes ({Object.keys(editedDances).length})
+                                </button>
+                                <button onClick={() => setConfirmBulkDelete({ type: 'selected' })} disabled={selectedDances.size === 0} className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                                    Delete Selected ({selectedDances.size})
+                                </button>
+                                <button onClick={() => setConfirmBulkDelete({ type: 'all' })} className="px-4 py-2 text-white bg-red-800 rounded-lg hover:bg-red-900">
+                                    Delete All
+                                </button>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="bg-gray-800 rounded-lg shadow overflow-hidden">
+                        {displayedDances.length === 0 ? (
+                            <div className="p-6 text-center text-gray-500">
+                                No line dances found. Add some or import from your TSV file!
                             </div>
-                        </div>
+                        ) : (
+                            viewMode === 'table' ? (
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-700 table-fixed">
+                                        <thead className="bg-gray-700">
+                                            <tr>
+                                                {bulkEditMode && (
+                                                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-[5%]">
+                                                        <input type="checkbox" onChange={handleSelectAll} checked={selectedDances.size > 0 && selectedDances.size === displayedDances.length} className="form-checkbox text-blue-500 bg-gray-700 rounded-md focus:ring-cyan-400" />
+                                                    </th>
+                                                )}
+                                                <th scope="col" className={`px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${bulkEditMode ? 'w-[20%]' : 'w-[25%]'}`}>Dance Name</th>
+                                                <th scope="col" className={`px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${bulkEditMode ? 'w-[20%]' : 'w-[25%]'}`}>Song Title</th>
+                                                <th scope="col" className={`px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${bulkEditMode ? 'w-[20%]' : 'w-[20%]'}`}>Song Artist</th>
+                                                <th scope="col" className={`px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${bulkEditMode ? 'w-[15%]' : 'w-[15%]'}`}>Difficulty</th>
+                                                <th scope="col" className={`px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${bulkEditMode ? 'w-[10%]' : 'w-[10%]'}`}>B. Friendly</th>
+                                                <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase tracking-wider w-1/4">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-gray-800 divide-y divide-gray-700">
+                                            {displayedDances.map((dance) => (
+                                                <tr key={dance.id} className={selectedDances.has(dance.id) ? 'bg-gray-700' : ''}>
+                                                    {bulkEditMode && (
+                                                        <td className="px-3 py-2 text-sm font-medium">
+                                                            <input type="checkbox" checked={selectedDances.has(dance.id)} onChange={() => handleSelectDance(dance.id)} className="form-checkbox text-blue-500 bg-gray-700 rounded-md focus:ring-cyan-400" />
+                                                        </td>
+                                                    )}
+                                                    <td className="px-3 py-2 text-sm font-medium text-white break-words">
+                                                        {bulkEditMode ? (
+                                                            <input type="text" value={editedDances[dance.id]?.danceName ?? dance.danceName} onChange={(e) => handleBulkEditChange(dance.id, 'danceName', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                        ) : (
+                                                            dance.danceName
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-sm text-gray-300 break-words">
+                                                        {bulkEditMode ? (
+                                                            <input type="text" value={editedDances[dance.id]?.songTitle ?? dance.songTitle} onChange={(e) => handleBulkEditChange(dance.id, 'songTitle', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                        ) : (
+                                                            dance.songTitle
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-sm text-gray-300 break-words">
+                                                        {bulkEditMode ? (
+                                                            <input type="text" value={editedDances[dance.id]?.songArtist ?? dance.songArtist} onChange={(e) => handleBulkEditChange(dance.id, 'songArtist', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                        ) : (
+                                                            dance.songArtist
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-sm text-gray-300 break-words">
+                                                        {bulkEditMode ? (
+                                                            <select value={editedDances[dance.id]?.difficulty ?? dance.difficulty} onChange={(e) => handleBulkEditChange(dance.id, 'difficulty', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1">
+                                                                <option value="Beginner">Beginner</option>
+                                                                <option value="Improver">Improver</option>
+                                                                <option value="Intermediate">Intermediate</option>
+                                                                <option value="Advanced">Advanced</option>
+                                                            </select>
+                                                        ) : (
+                                                            dance.difficulty
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2">
+                                                        {bulkEditMode ? (
+                                                            <button onClick={() => handleBulkToggleBeginnerFriendly(dance)} className={`rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors ${editedDances[dance.id]?.isBeginnerFriendly ?? dance.isBeginnerFriendly ? 'neon-pink-bg text-white hover:bg-pink-600' : 'bg-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                                                                B
+                                                            </button>
+                                                        ) : (
+                                                            <button onClick={() => handleToggleBeginnerFriendly(dance)} className={`rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors ${dance.isBeginnerFriendly ? 'bg-pink-500 text-white hover:bg-pink-600' : 'bg-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                                                                B
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right text-sm font-medium">
+                                                        <div className="flex justify-end space-x-1 items-center">
+                                                            <button onClick={() => onAddDanceToQueue(dance, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                                                                </svg>
+                                                                Add Next
+                                                            </button>
+                                                            <button onClick={() => onAddDanceToQueue(dance, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                                                                </svg>
+                                                                Add Last
+                                                            </button>
+                                                            {dance.stepSheetLink && (
+                                                                <a href={dance.stepSheetLink} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-500" title="View Step Sheet">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                                                        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                                                                    </svg>
+                                                                </a>
+                                                            )}
+                                                            <button onClick={() => { setEditingDance(dance); setIsModalOpen(true); }} className="text-yellow-400 hover:text-yellow-500" title="Edit">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                                                </svg>
+                                                            </button>
+                                                            <button onClick={() => setConfirmDelete(dance)} className="text-red-600 hover:text-red-700" title="Delete">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                                    </svg>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                                    {displayedDances.map((dance) => (
+                                        <div key={dance.id} className="relative bg-gray-700 rounded-lg shadow-md p-4 flex flex-col justify-between">
+                                            {bulkEditMode && (
+                                                <div className="absolute top-2 left-2">
+                                                    <input type="checkbox" checked={selectedDances.has(dance.id)} onChange={() => handleSelectDance(dance.id)} className="form-checkbox text-blue-500 bg-gray-800 rounded-md focus:ring-cyan-400" />
+                                                </div>
+                                            )}
+                                            <button 
+                                                onClick={() => bulkEditMode ? handleBulkToggleBeginnerFriendly(dance) : handleToggleBeginnerFriendly(dance)} 
+                                                className={`absolute top-2 right-2 w-8 h-8 flex items-center justify-center font-bold text-sm rounded-full transition-colors z-10 
+                                                    ${(editedDances[dance.id]?.isBeginnerFriendly ?? dance.isBeginnerFriendly) ? 'neon-pink-bg text-white neon-glow' : 'bg-gray-800 text-gray-400 border-2 border-gray-600'}`} 
+                                                title="Toggle Beginner Friendly">
+                                                B
+                                            </button>
+                                            <div>
+                                                <h3 className="text-lg font-bold text-cyan-300 mb-1">
+                                                    {bulkEditMode ? (
+                                                        <input type="text" value={editedDances[dance.id]?.danceName ?? dance.danceName} onChange={(e) => handleBulkEditChange(dance.id, 'danceName', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                    ) : (
+                                                        dance.danceName
+                                                    )}
+                                                </h3>
+                                                <p className="text-sm text-gray-300">
+                                                    {bulkEditMode ? (
+                                                        <input type="text" value={editedDances[dance.id]?.songTitle ?? dance.songTitle} onChange={(e) => handleBulkEditChange(dance.id, 'songTitle', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                    ) : (
+                                                        dance.songTitle
+                                                    )}
+                                                </p>
+                                                <p className="text-xs text-gray-400">
+                                                    {bulkEditMode ? (
+                                                        <input type="text" value={editedDances[dance.id]?.songArtist ?? dance.songArtist} onChange={(e) => handleBulkEditChange(dance.id, 'songArtist', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                    ) : (
+                                                        dance.songArtist
+                                                    )}
+                                                </p>
+                                            </div>
+                                            <div className="mt-4 flex flex-wrap gap-2 items-center">
+                                                {bulkEditMode ? (
+                                                     <select value={editedDances[dance.id]?.difficulty ?? dance.difficulty} onChange={(e) => handleBulkEditChange(dance.id, 'difficulty', e.target.value)} className="text-xs font-semibold px-2 py-1 rounded-full bg-gray-600 text-white border-gray-500">
+                                                        <option value="Beginner">Beginner</option>
+                                                        <option value="Improver">Improver</option>
+                                                        <option value="Intermediate">Intermediate</option>
+                                                        <option value="Advanced">Advanced</option>
+                                                    </select>
+                                                ) : (
+                                                    <span className="text-xs font-semibold px-2 py-1 rounded-full text-white" style={{
+                                                        backgroundColor:
+                                                            dance.difficulty === 'Beginner' ? '#34d399' :
+                                                            dance.difficulty === 'Improver' ? '#60a5fa' :
+                                                            dance.difficulty === 'Intermediate' ? '#fde047' :
+                                                            dance.difficulty === 'Advanced' ? '#f87171' : '#a1a1aa'
+                                                    }}>{dance.difficulty}</span>
+                                                )}
+                                                <div className="flex-grow"></div>
+                                                <div className="flex space-x-2">
+                                                    <button onClick={() => onAddDanceToQueue(dance, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                        Add Next
+                                                    </button>
+                                                    <button onClick={() => onAddDanceToQueue(dance, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                        Add Last
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end mt-2 space-x-2">
+                                                {dance.stepSheetLink && (
+                                                    <a href={dance.stepSheetLink} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-500" title="View Step Sheet">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                                            <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </a>
+                                                )}
+                                                <button onClick={() => { setEditingDance(dance); setIsModalOpen(true); }} className="text-yellow-400 hover:text-yellow-500" title="Edit">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                                    </svg>
+                                                </button>
+                                                <button onClick={() => setConfirmDelete(dance)} className="text-red-600 hover:text-red-700" title="Delete">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )
+                        )}
                     </div>
                 </div>
             );
@@ -990,6 +1614,56 @@
                 batch.set(newDocRef, newItemData);
                 batch.delete(db.collection('requests').doc(request.id));
                 await batch.commit();
+            };
+
+            const handleAddDanceToQueue = async (dance, position) => {
+                if (!db || !loggedInDj) return;
+                
+                // Create a "request" object from the dance data
+                const requestFromDance = {
+                    danceName: dance.danceName,
+                    songName: dance.songTitle,
+                    artist: dance.songArtist,
+                    stepSheetUrl: dance.stepSheetLink,
+                    customerName: loggedInDj.name,
+                    createdAt: new Date(),
+                };
+
+                // Add the new request to the requests collection
+                const newRequestRef = await db.collection('requests').add(requestFromDance);
+                
+                // Add the newly created request to the queue
+                const upcomingQueue = queue.filter(q => !q.played);
+                const newItemData = {
+                    type: 'song',
+                    danceName: requestFromDance.danceName,
+                    songName: requestFromDance.songName,
+                    artist: requestFromDance.artist,
+                    spotifyLink: requestFromDance.spotifyLink || '',
+                    stepSheetUrl: requestFromDance.stepSheetUrl || '',
+                    isBeginnerFriendly: dance.isBeginnerFriendly,
+                    played: false,
+                    likes: [],
+                    dislikes: []
+                };
+
+                const batch = db.batch();
+                
+                if (position === 'next') {
+                    newItemData.order = 1;
+                    upcomingQueue.forEach(item => {
+                        batch.update(db.collection('queue').doc(item.id), { order: item.order + 1 });
+                    });
+                } else { // 'last'
+                    newItemData.order = upcomingQueue.length;
+                }
+                
+                const newDocRef = db.collection('queue').doc();
+                batch.set(newDocRef, newItemData);
+                await batch.commit();
+
+                // Now delete the request after it has been added to the queue
+                await db.collection('requests').doc(newRequestRef.id).delete();
             };
 
             const handleDeleteRequest = async (id) => { if (!db) return; await db.collection('requests').doc(id).delete(); };
@@ -1206,7 +1880,7 @@
                     return <AdminPanel djs={djs} onClose={() => setShowAdminPanel(false)} />;
                 }
                  if (showManageLineDances) {
-                    return <ManageLineDancesPanel lineDances={lineDances} onClose={() => setShowManageLineDances(false)} />;
+                    return <LineDanceManagement onClose={() => setShowManageLineDances(false)} onAddDanceToQueue={handleAddDanceToQueue} />;
                 }
                 return (
                     <div className="bg-gray-900 text-white min-h-screen p-4 md:p-8">
