@@ -50,6 +50,14 @@
         .neon-glow {
             box-shadow: 0 0 5px #ff00ff, 0 0 10px #ff00ff;
         }
+        /* Flashing animation for queue items */
+        @keyframes flash-red {
+            0%, 100% { background-color: #374151; } /* bg-gray-700 */
+            50% { background-color: #991b1b; } /* bg-red-800 */
+        }
+        .flashing {
+            animation: flash-red 1.5s infinite;
+        }
     </style>
 </head>
 <body class="bg-gray-900">
@@ -493,7 +501,7 @@
                     <p className="text-gray-300 mb-4">Which dance will be taught?</p>
                     <select value={selectedDance} onChange={e => setSelectedDance(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 mb-6">
                         <option value="">-- Select a Dance --</option>
-                        {lineDancesList.map(dance => <option key={dance.name} value={dance.name}>{dance.name}</option>)}
+                        {lineDancesList.map(dance => <option key={dance.id} value={dance.danceName}>{dance.danceName}</option>)}
                     </select>
                     <div className="flex justify-end gap-4">
                         <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
@@ -580,16 +588,30 @@
                         const canVote = !isDjView && item.type === 'song' && (isNowPlaying || item.played);
                         const currentVote = votedSongs.find(v => v.id === item.id)?.vote;
 
-                        const isPartnerDance = partnerDancesList.some(p => p.name === item.danceName);
-                        const isLineDance = item.type === 'song' && item.danceName && !isPartnerDance;
-                        const borderColorClass = isPartnerDance ? 'border-teal-400' : isLineDance ? 'border-pink-500' : 'border-transparent';
+                        // Border Color Logic
+                        let borderColorClass = 'border-transparent';
+                        if (item.danceName === 'West Coast Swing') {
+                            borderColorClass = 'border-yellow-500';
+                        } else {
+                            const isPartnerDance = partnerDancesList.some(p => p.name === item.danceName);
+                            const isLineDance = (item.type === 'song' || !item.type) && item.danceName && !isPartnerDance;
+                            if (isPartnerDance) borderColorClass = 'border-teal-400';
+                            else if (isLineDance) borderColorClass = 'border-pink-500';
+                        }
+
+                        let bgColorClass = 'bg-gray-700';
+                        if (item.type === 'event') bgColorClass = 'bg-indigo-700';
+                        if (item.type === 'announcement') bgColorClass = 'bg-green-700';
+                        if (item.type === 'shout-out') bgColorClass = 'bg-purple-700';
+                        if (item.type === 'lesson') bgColorClass = 'bg-pink-700';
 
                         const itemContent = (
                             <div 
                                 className={`flex items-center gap-4 p-3 rounded-lg shadow-md transition-all border-l-4
-                                    ${item.type === 'event' ? 'bg-pink-600' : 'bg-gray-700'} 
+                                    ${bgColorClass}
                                     ${item.played ? 'opacity-50' : ''}
                                     ${isDjView && !item.played ? 'cursor-move' : ''}
+                                    ${item.flashing ? 'flashing' : ''}
                                     ${borderColorClass}`}
                                 draggable={isDjView && !item.played}
                                 onDragStart={(e) => handleDragStart(e, index)}
@@ -608,25 +630,38 @@
                                     ) : '🎵'}
                                 </div>
                                 <div className="flex-grow">
-                                    <div className="flex items-center gap-2">
-                                        <p className={`font-bold text-lg ${item.type === 'event' ? 'text-white' : 'text-cyan-300'}`}>
-                                            {item.songName || item.danceName}
-                                        </p>
-                                    </div>
-                                    
-                                    {item.danceName && item.songName && (
-                                        <div className="flex items-center gap-2">
-                                            <p className={`text-sm ${item.type === 'event' ? 'text-pink-200' : 'text-gray-300'}`}>
-                                                ({item.danceName})
+                                    {['announcement', 'shout-out', 'lesson', 'event'].includes(item.type) ? (
+                                        // Display for Events/Announcements
+                                        <>
+                                            <p className="font-bold text-lg text-white">
+                                                {item.danceName}
                                             </p>
-                                            {item.stepSheetUrl && (
-                                                <a href={item.stepSheetUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white text-xs font-semibold px-2 py-0.5 rounded-md hover:bg-purple-700">
-                                                    step sheet
-                                                </a>
+                                            <p className="text-sm text-gray-300">{item.songName}</p>
+                                            <p className="text-xs text-gray-400">{item.artist}</p>
+                                        </>
+                                    ) : (
+                                        // Display for Songs
+                                        <>
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-bold text-lg text-cyan-300">
+                                                    {item.songName || item.danceName}
+                                                </p>
+                                            </div>
+                                            {item.danceName && item.songName && (
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-sm text-gray-300">
+                                                        ({item.danceName})
+                                                    </p>
+                                                </div>
                                             )}
-                                        </div>
+                                            <p className="text-xs text-gray-400">{item.artist}</p>
+                                        </>
                                     )}
-                                    <p className="text-xs text-gray-400">{item.artist}</p>
+                                    {item.stepSheetUrl && (
+                                        <a href={item.stepSheetUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white text-xs font-semibold px-2 py-0.5 mt-1 inline-block rounded-md hover:bg-purple-700">
+                                            step sheet
+                                        </a>
+                                    )}
                                 </div>
                                 {canVote && (
                                     <div className="flex gap-2">
@@ -895,7 +930,7 @@
         };
 
         // --- Main Line Dance Management Component ---
-        const LineDanceManagement = ({ onClose, onAddDanceToQueue }) => {
+        const LineDanceManagement = ({ onClose, onAddToQueue }) => {
             const [lineDances, setLineDances] = useState([]);
             const [queue, setQueue] = useState([]);
             const [searchTerm, setSearchTerm] = useState('');
@@ -1177,6 +1212,17 @@
                 }));
             };
 
+            const handleAddDanceToQueue = (dance, position) => {
+                 onAddToQueue({
+                    type: 'song',
+                    danceName: dance.danceName,
+                    songName: dance.songTitle,
+                    artist: dance.songArtist,
+                    stepSheetUrl: dance.stepSheetLink || '',
+                    isBeginnerFriendly: dance.isBeginnerFriendly || false,
+                }, position);
+            }
+
             return (
                 <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
                     <style>{`
@@ -1405,13 +1451,13 @@
                                                     </td>
                                                     <td className="px-3 py-2 text-right text-sm font-medium">
                                                         <div className="flex justify-end space-x-1 items-center">
-                                                            <button onClick={() => onAddDanceToQueue(dance, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                            <button onClick={() => handleAddDanceToQueue(dance, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                                                                     <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
                                                                 </svg>
                                                                 Add Next
                                                             </button>
-                                                            <button onClick={() => onAddDanceToQueue(dance, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                            <button onClick={() => handleAddDanceToQueue(dance, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                                                                     <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
                                                                 </svg>
@@ -1500,13 +1546,13 @@
                                                 )}
                                                 <div className="flex-grow"></div>
                                                 <div className="flex space-x-2">
-                                                    <button onClick={() => onAddDanceToQueue(dance, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                    <button onClick={() => handleAddDanceToQueue(dance, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
                                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                                                             <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
                                                         </svg>
                                                         Add Next
                                                     </button>
-                                                    <button onClick={() => onAddDanceToQueue(dance, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                    <button onClick={() => handleAddDanceToQueue(dance, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
                                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                                                             <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
                                                         </svg>
@@ -1543,6 +1589,401 @@
                 </div>
             );
         };
+        
+        // --- NEW DJ TOOL COMPONENTS ---
+
+        const LineRequestForm = ({ onAddToQueue, djName, lineDancesList }) => {
+            const [danceName, setDanceName] = useState('');
+            const [songName, setSongName] = useState('');
+            const [artist, setArtist] = useState('');
+            const [stepSheetUrl, setStepSheetUrl] = useState('');
+            const [customerName, setCustomerName] = useState(djName || '');
+            const [lineDanceSearch, setLineDanceSearch] = useState('');
+            const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+            const dropdownRef = useRef(null);
+
+            const handleLineDanceSelect = (dance) => {
+                setDanceName(dance.danceName || '');
+                setSongName(dance.songTitle || '');
+                setArtist(dance.songArtist || '');
+                setStepSheetUrl(dance.stepSheetLink || '');
+                setLineDanceSearch(dance.danceName);
+                setIsDropdownOpen(false);
+            };
+
+            const filteredLineDances = lineDanceSearch
+                ? lineDancesList.filter(dance =>
+                    (dance.danceName && dance.danceName.toLowerCase().includes(lineDanceSearch.toLowerCase())) ||
+                    (dance.songTitle && dance.songTitle.toLowerCase().includes(lineDanceSearch.toLowerCase())) ||
+                    (dance.songArtist && dance.songArtist.toLowerCase().includes(lineDanceSearch.toLowerCase()))
+                )
+                : lineDancesList;
+
+            useEffect(() => {
+                const handleClickOutside = (event) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                        setIsDropdownOpen(false);
+                    }
+                };
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => document.removeEventListener("mousedown", handleClickOutside);
+            }, []);
+
+            const handleSubmit = (position) => {
+                onAddToQueue({ danceName, songName, artist, customerName, type: 'song', stepSheetUrl }, position);
+            };
+
+            return (
+                <form onSubmit={(e) => e.preventDefault()}>
+                    <div className="mb-4 relative" ref={dropdownRef}>
+                        <label htmlFor="dance-search" className="block text-cyan-300 text-sm font-bold mb-2">Quick Select a Line Dance</label>
+                        <input id="dance-search" type="text" value={lineDanceSearch} onChange={(e) => { setLineDanceSearch(e.target.value); setIsDropdownOpen(true); }} onFocus={() => setIsDropdownOpen(true)} placeholder="Search by dance, song, or artist..." autoComplete="off" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        {isDropdownOpen && filteredLineDances.length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                {filteredLineDances.map(dance => (
+                                    <div key={dance.id} onClick={() => handleLineDanceSelect(dance)} className="px-4 py-2 text-white hover:bg-gray-700 cursor-pointer">
+                                        <p className="font-bold">{dance.danceName}</p>
+                                        <p className="text-sm text-gray-400">{dance.songTitle} - {dance.songArtist}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <p className="text-center text-gray-400 my-2">OR</p>
+                    <div className="mb-4">
+                        <label htmlFor="dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style</label>
+                        <input type="text" id="dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song Name</label>
+                        <input type="text" id="song-name" value={songName} onChange={e => setSongName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist</label>
+                        <input type="text" id="artist-name" value={artist} onChange={e => setArtist(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                        <button onClick={() => handleSubmit('next')} className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-2 rounded">Add Next</button>
+                        <button onClick={() => handleSubmit('last')} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-2 rounded">Add Last</button>
+                    </div>
+                </form>
+            );
+        };
+        
+        const PartnerRequestForm = ({ onAddToQueue, djName, initialDanceType, partnerDancesList }) => {
+            const [danceName, setDanceName] = useState(initialDanceType || '');
+            const [songName, setSongName] = useState('');
+            const [artist, setArtist] = useState('');
+            const [customerName, setCustomerName] = useState(djName || '');
+            
+            const handleSubmit = (position) => {
+                onAddToQueue({ danceName, songName, artist, customerName, type: 'song' }, position);
+            };
+
+            return (
+                <form onSubmit={(e) => e.preventDefault()}>
+                     <div className="mb-4">
+                        <label htmlFor="dance-select" className="block text-cyan-300 text-sm font-bold mb-2">Quick Select a Dance Style</label>
+                        <select id="dance-select" value={danceName} onChange={e => setDanceName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
+                            <option value="">-- Select a Dance --</option>
+                            {partnerDancesList.map(dance => <option key={dance.name} value={dance.name}>{dance.name}</option>)}
+                        </select>
+                    </div>
+                    <p className="text-center text-gray-400 my-2">OR</p>
+                    <div className="mb-4">
+                        <label htmlFor="dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style</label>
+                        <input type="text" id="dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song Name</label>
+                         <div className="flex items-center gap-2">
+                           <input type="text" id="song-name" value={songName} onChange={e => setSongName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist</label>
+                        <input type="text" id="artist-name" value={artist} onChange={e => setArtist(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                     <div className="flex gap-2 mt-4">
+                        <button onClick={() => handleSubmit('next')} className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-2 rounded">Add Next</button>
+                        <button onClick={() => handleSubmit('last')} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-2 rounded">Add Last</button>
+                    </div>
+                </form>
+            );
+        };
+        
+        const DjLineDanceLessonForm = ({ onAddToQueue, djName, lineDancesList }) => {
+            const [danceName, setDanceName] = useState('');
+            const [instructor, setInstructor] = useState(djName);
+            const [lessonTime, setLessonTime] = useState('');
+            const [stepSheetUrl, setStepSheetUrl] = useState('');
+            const [lineDanceSearch, setLineDanceSearch] = useState('');
+            const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+            const dropdownRef = useRef(null);
+
+            const handleLineDanceSelect = (dance) => {
+                setDanceName(dance.danceName || '');
+                setStepSheetUrl(dance.stepSheetLink || '');
+                setLineDanceSearch(dance.danceName);
+                setIsDropdownOpen(false);
+            };
+
+            const filteredLineDances = lineDanceSearch
+                ? lineDancesList.filter(dance =>
+                    (dance.danceName && dance.danceName.toLowerCase().includes(lineDanceSearch.toLowerCase()))
+                )
+                : lineDancesList;
+
+            const handleSubmit = (position) => {
+                onAddToQueue({ 
+                    danceName: `Lesson: ${danceName}`, 
+                    songName: `Taught by ${instructor}`, 
+                    artist: `at ${lessonTime}`, 
+                    customerName: djName,
+                    type: 'lesson',
+                    stepSheetUrl: stepSheetUrl,
+                }, position);
+            };
+
+            return (
+                <form onSubmit={(e) => e.preventDefault()}>
+                    <div className="mb-4 relative" ref={dropdownRef}>
+                         <label htmlFor="dance-search" className="block text-cyan-300 text-sm font-bold mb-2">Select a Line Dance to Teach</label>
+                        <input id="dance-search" type="text" value={lineDanceSearch} onChange={(e) => { setLineDanceSearch(e.target.value); setIsDropdownOpen(true); }} onFocus={() => setIsDropdownOpen(true)} placeholder="Search for the dance..." autoComplete="off" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        {isDropdownOpen && filteredLineDances.length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                {filteredLineDances.map(dance => (
+                                    <div key={dance.id} onClick={() => handleLineDanceSelect(dance)} className="px-4 py-2 text-white hover:bg-gray-700 cursor-pointer">
+                                        <p className="font-bold">{dance.danceName}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="instructor-name" className="block text-cyan-300 text-sm font-bold mb-2">Instructor Name</label>
+                        <input type="text" id="instructor-name" value={instructor} onChange={e => setInstructor(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                     <div className="mb-4">
+                        <label htmlFor="lesson-time" className="block text-cyan-300 text-sm font-bold mb-2">Lesson Time</label>
+                        <input type="time" id="lesson-time" value={lessonTime} onChange={e => setLessonTime(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                        <button onClick={() => handleSubmit('next')} className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-2 rounded">Add Next</button>
+                        <button onClick={() => handleSubmit('last')} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-2 rounded">Add Last</button>
+                    </div>
+                </form>
+            );
+        };
+        
+        const TimeInputModal = ({ onConfirm, eventName }) => {
+            const getInitialTime = () => {
+                if (eventName === 'Last Call') return '23:45';
+                if (eventName === 'Closing Time') return '00:00';
+                return '';
+            };
+            const [time, setTime] = useState(getInitialTime);
+
+            const handleConfirm = () => {
+                if (time) {
+                    onConfirm(time);
+                }
+            };
+
+            return (
+                <div>
+                    <p className="text-gray-300 mb-4">Set the time for "{eventName}"</p>
+                    <input 
+                        type="time" 
+                        value={time} 
+                        onChange={(e) => setTime(e.target.value)} 
+                        className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 mb-6"
+                    />
+                    <button onClick={handleConfirm} disabled={!time} className="w-full bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg disabled:opacity-50">
+                        Add to Queue
+                    </button>
+                </div>
+            );
+        };
+
+        const AnnouncementForm = ({ onAddToQueue }) => {
+            const [header, setHeader] = useState('');
+            const [details, setDetails] = useState('');
+            const [useExpiration, setUseExpiration] = useState(false);
+            const [expirationTime, setExpirationTime] = useState('');
+
+            const handleToggleExpiration = (e) => {
+                const checked = e.target.checked;
+                setUseExpiration(checked);
+                if (checked) {
+                    const now = new Date();
+                    now.setMinutes(now.getMinutes() + 30);
+                    const defaultTime = now.toTimeString().slice(0, 5); // HH:MM format
+                    setExpirationTime(defaultTime);
+                } else {
+                    setExpirationTime('');
+                }
+            };
+
+            const handleSubmit = (position) => {
+                let expirationTimestamp = null;
+                if (useExpiration && expirationTime) {
+                    const today = new Date().toISOString().split('T')[0];
+                    expirationTimestamp = new Date(`${today}T${expirationTime}`).toISOString();
+                }
+                onAddToQueue({ 
+                    danceName: header, 
+                    songName: details, 
+                    artist: 'ANNOUNCEMENT',
+                    type: 'announcement',
+                    expirationTime: expirationTimestamp
+                }, position);
+            };
+
+            return (
+                <form onSubmit={(e) => e.preventDefault()}>
+                    <div className="mb-4">
+                        <label htmlFor="announcement-header" className="block text-cyan-300 text-sm font-bold mb-2">Header</label>
+                        <input type="text" id="announcement-header" value={header} onChange={e => setHeader(e.target.value)} required placeholder="e.g., Drink Special!" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="announcement-details" className="block text-cyan-300 text-sm font-bold mb-2">Details</label>
+                        <textarea id="announcement-details" value={details} onChange={e => setDetails(e.target.value)} placeholder="e.g., $5 Fireball shots for the next hour!" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 h-24"></textarea>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-4">
+                        <input type="checkbox" id="use-expiration-announcement" checked={useExpiration} onChange={handleToggleExpiration} className="form-checkbox text-pink-500 bg-gray-700 rounded-md focus:ring-pink-400" />
+                        <label htmlFor="use-expiration-announcement" className="text-sm font-medium text-cyan-300">Set 30-Min Expiration</label>
+                    </div>
+                    {useExpiration && (
+                        <div className="mb-4">
+                            <label htmlFor="expiration-time-announcement" className="block text-cyan-300 text-sm font-bold mb-2">Expiration Time</label>
+                            <input type="time" id="expiration-time-announcement" value={expirationTime} onChange={e => setExpirationTime(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                    )}
+                    <div className="flex gap-2 mt-4">
+                        <button onClick={() => handleSubmit('next')} className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-2 rounded">Add Next</button>
+                        <button onClick={() => handleSubmit('last')} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-2 rounded">Add Last</button>
+                    </div>
+                </form>
+            );
+        };
+
+        const ShoutOutForm = ({ onAddToQueue }) => {
+            const [name, setName] = useState('');
+            const [occasion, setOccasion] = useState('');
+            const [useExpiration, setUseExpiration] = useState(false);
+            const [expirationTime, setExpirationTime] = useState('');
+
+            const handleToggleExpiration = (e) => {
+                const checked = e.target.checked;
+                setUseExpiration(checked);
+                if (checked) {
+                    const now = new Date();
+                    now.setMinutes(now.getMinutes() + 30);
+                    const defaultTime = now.toTimeString().slice(0, 5); // HH:MM format
+                    setExpirationTime(defaultTime);
+                } else {
+                    setExpirationTime('');
+                }
+            };
+
+            const handleSubmit = (position) => {
+                let expirationTimestamp = null;
+                if (useExpiration && expirationTime) {
+                    const today = new Date().toISOString().split('T')[0];
+                    expirationTimestamp = new Date(`${today}T${expirationTime}`).toISOString();
+                }
+                onAddToQueue({ 
+                    danceName: `Shout-out for ${name}!`, 
+                    songName: `Happy ${occasion}!`, 
+                    artist: 'SHOUT-OUT',
+                    type: 'shout-out',
+                    expirationTime: expirationTimestamp
+                }, position);
+            };
+
+            return (
+                <form onSubmit={(e) => e.preventDefault()}>
+                    <div className="mb-4">
+                        <label htmlFor="shoutout-name" className="block text-cyan-300 text-sm font-bold mb-2">Name(s)</label>
+                        <input type="text" id="shoutout-name" value={name} onChange={e => setName(e.target.value)} required placeholder="e.g., Sarah" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="shoutout-occasion" className="block text-cyan-300 text-sm font-bold mb-2">Occasion</label>
+                        <input type="text" id="shoutout-occasion" value={occasion} onChange={e => setOccasion(e.target.value)} required placeholder="e.g., 21st Birthday" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="flex items-center space-x-2 mb-4">
+                        <input type="checkbox" id="use-expiration-shoutout" checked={useExpiration} onChange={handleToggleExpiration} className="form-checkbox text-pink-500 bg-gray-700 rounded-md focus:ring-pink-400" />
+                        <label htmlFor="use-expiration-shoutout" className="text-sm font-medium text-cyan-300">Set 30-Min Expiration</label>
+                    </div>
+                    {useExpiration && (
+                        <div className="mb-4">
+                            <label htmlFor="expiration-time-shoutout" className="block text-cyan-300 text-sm font-bold mb-2">Expiration Time</label>
+                            <input type="time" id="expiration-time-shoutout" value={expirationTime} onChange={e => setExpirationTime(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                    )}
+                    <div className="flex gap-2 mt-4">
+                        <button onClick={() => handleSubmit('next')} className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-2 rounded">Add Next</button>
+                        <button onClick={() => handleSubmit('last')} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-2 rounded">Add Last</button>
+                    </div>
+                </form>
+            );
+        };
+        
+        const DjToolsPanel = ({ onToolClick, onDragStart }) => {
+            const buttonOrder = [
+                'Line Dance', 'Country Partner', 
+                'Line Dance Lesson', 'West Coast', 
+                'Custom Announcement', 'Birthday Shout-Out',
+                'Last Call', 'Closing Time'
+            ];
+
+            const getButtonClass = (event) => {
+                switch (event) {
+                    case 'Line Dance':
+                    case 'Line Dance Lesson':
+                        return 'bg-pink-500 hover:bg-pink-600 text-white';
+                    case 'Country Partner':
+                        return 'bg-cyan-500 hover:bg-cyan-600 text-white';
+                    case 'West Coast':
+                        return 'bg-yellow-500 hover:bg-yellow-600 text-gray-900';
+                    case 'Last Call':
+                    case 'Closing Time':
+                        return 'bg-red-800 hover:bg-red-700 text-white';
+                    case 'Custom Announcement':
+                        return 'bg-green-600 hover:bg-green-700 text-white';
+                    case 'Birthday Shout-Out':
+                         return 'bg-purple-600 hover:bg-purple-700 text-white';
+                    default:
+                        return 'bg-gray-700 hover:bg-gray-600 text-cyan-300';
+                }
+            };
+            
+            const createButton = (eventName) => (
+                <button
+                    key={eventName}
+                    draggable
+                    onDragStart={(e) => onDragStart(e, 'event', eventName)}
+                    onClick={() => onToolClick(eventName)}
+                    className={`${getButtonClass(eventName)} font-semibold p-3 rounded-lg text-center cursor-grab transition-colors`}
+                >
+                    {eventName}
+                </button>
+            );
+
+            return (
+                 <div>
+                    <h3 className="text-2xl font-semibold text-pink-400 mb-3">DJ Tools</h3>
+                    <div className="bg-gray-800 p-4 rounded-lg">
+                        <div className="grid grid-cols-2 gap-3">
+                            <button onClick={() => onToolClick('AI Announcement')} className="bg-purple-600 hover:bg-purple-700 col-span-2 text-white font-semibold p-3 rounded-lg text-center">✨ Generate Announcement</button>
+                            {buttonOrder.map(createButton)}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
 
         const App = () => {
             const [loggedInDj, setLoggedInDj] = useState(null);
@@ -1554,8 +1995,6 @@
             const [showLineRequestModal, setShowLineRequestModal] = useState(false);
             const [showPartnerRequestModal, setShowPartnerRequestModal] = useState(false);
             const [showLoginModal, setShowLoginModal] = useState(false);
-            const [showLineDanceLessonModal, setShowLineDanceLessonModal] = useState(false);
-            const [showGeminiModal, setShowGeminiModal] = useState(false);
             const [showAdminPanel, setShowAdminPanel] = useState(false);
             const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
             const [showManageLineDances, setShowManageLineDances] = useState(false);
@@ -1564,7 +2003,6 @@
             const [cashappUser, setCashappUser] = useState('');
             const [tipSaveConfirm, setTipSaveConfirm] = useState(false);
             const [confirmState, setConfirmState] = useState({ show: false, title: '', message: '', onConfirm: () => {} });
-            const [promptState, setPromptState] = useState({ show: false, title: '', message: '', onConfirm: () => {} });
             const [showDjHistory, setShowDjHistory] = useState(false);
             const [searchTerm, setSearchTerm] = useState('');
             const [votedSongs, setVotedSongs] = useState(() => {
@@ -1579,6 +2017,10 @@
                 }
                 return id;
             });
+
+            // New state for the unified DJ tool modal
+            const [djToolModal, setDjToolModal] = useState({ show: false, tool: null, title: '' });
+
 
             useEffect(() => {
                 if (loggedInDj) {
@@ -1597,14 +2039,10 @@
                     return;
                 }
                 seedInitialData();
+                
                 const queueQuery = db.collection("queue").orderBy("order");
                 const unsubscribeQueue = queueQuery.onSnapshot(snapshot => {
                     const queueData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    queueData.sort((a, b) => {
-                        if (a.played && !b.played) return 1;
-                        if (!a.played && b.played) return -1;
-                        return a.order - b.order;
-                    });
                     setQueue(queueData);
                 });
 
@@ -1633,6 +2071,34 @@
                         setActiveDj(null);
                     }
                 });
+                
+                // Interval to check for expired announcements and flashing events
+                const interval = setInterval(() => {
+                    setQueue(currentQueue => {
+                        const now = new Date();
+                        // Filter out expired items first
+                        const filteredQueue = currentQueue.filter(item => {
+                            if (item.expirationTime) {
+                                return new Date(item.expirationTime) > now;
+                            }
+                            return true;
+                        });
+
+                        // Then update flashing status on the remaining items
+                        return filteredQueue.map(item => {
+                            if (item.targetTime) {
+                                const target = new Date(item.targetTime);
+                                const diff = target.getTime() - now.getTime();
+                                const fiveMinutes = 5 * 60 * 1000;
+                                if (diff > 0 && diff < fiveMinutes) {
+                                    return { ...item, flashing: true };
+                                }
+                                return { ...item, flashing: false };
+                            }
+                            return { ...item, flashing: false };
+                        });
+                    });
+                }, 5000); // Check every 5 seconds
 
                 return () => { 
                     unsubscribeQueue(); 
@@ -1640,90 +2106,94 @@
                     unsubscribeDjs(); 
                     unsubscribeActiveDj();
                     unsubscribeLineDances();
+                    clearInterval(interval);
                 };
             }, []);
+            
+            const addToQueue = async (itemData, position) => {
+                if (!db) return;
+                
+                setDjToolModal({ show: false, tool: null, title: '' });
+
+                const upcomingQueue = queue
+                    .filter(q => !q.played)
+                    .sort((a, b) => a.order - b.order);
+
+                const batch = db.batch();
+
+                const newItemData = {
+                    ...itemData,
+                    played: false,
+                    likes: [],
+                    dislikes: [],
+                    createdAt: new Date(),
+                    expirationTime: itemData.expirationTime || null,
+                    targetTime: itemData.targetTime || null,
+                    customerName: itemData.customerName || loggedInDj.name,
+                };
+                delete newItemData.id;
+
+                if (position === 'next') {
+                    newItemData.order = 1;
+                    upcomingQueue.forEach(item => {
+                        if (item.order >= 1) {
+                            const itemRef = db.collection('queue').doc(item.id);
+                            batch.update(itemRef, { order: item.order + 1 });
+                        }
+                    });
+                } else { // 'last'
+                    newItemData.order = upcomingQueue.length;
+                }
+
+                const newDocRef = db.collection('queue').doc();
+                batch.set(newDocRef, newItemData);
+                
+                try {
+                    await batch.commit();
+                } catch (error) {
+                    console.error("Error adding item to queue:", error);
+                }
+            };
 
             const handleAddRequestToQueue = async (request, position) => {
                 if (!db) return;
-                const upcomingQueue = queue.filter(q => !q.played);
-                const batch = db.batch();
-                
-                const newItemData = {
+                const itemData = {
                     type: 'song',
                     danceName: request.danceName,
                     songName: request.songName,
                     artist: request.artist,
                     spotifyLink: request.spotifyLink || '',
                     stepSheetUrl: request.stepSheetUrl || '',
-                    played: false,
-                    likes: [],
-                    dislikes: []
                 };
-
-                if (position === 'next') {
-                    newItemData.order = 1; // Position #2
-                    upcomingQueue.forEach(item => {
-                        if (item.order >= newItemData.order) {
-                            batch.update(db.collection('queue').doc(item.id), { order: item.order + 1 });
-                        }
-                    });
-                } else { // 'last'
-                    newItemData.order = upcomingQueue.length;
-                }
-                
-                const newDocRef = db.collection('queue').doc();
-                batch.set(newDocRef, newItemData);
-                batch.delete(db.collection('requests').doc(request.id));
-                await batch.commit();
+                await addToQueue(itemData, position);
+                await db.collection('requests').doc(request.id).delete();
             };
 
-            const handleAddDanceToQueue = async (dance, position) => {
-                if (!db || !loggedInDj) return;
+            const handleTimeEventConfirm = (time, eventName) => {
+                const today = new Date().toISOString().split('T')[0];
+                const targetTime = new Date(`${today}T${time}`);
                 
-                const upcomingQueue = queue.filter(q => !q.played);
-                const newItemData = {
-                    type: 'song',
-                    danceName: dance.danceName,
-                    songName: dance.songTitle,
-                    artist: dance.songArtist,
-                    spotifyLink: dance.spotifyLink || '',
-                    stepSheetUrl: dance.stepSheetLink || '',
-                    isBeginnerFriendly: dance.isBeginnerFriendly || false,
-                    played: false,
-                    likes: [],
-                    dislikes: []
+                const eventData = {
+                    danceName: eventName,
+                    artist: `at ${time}`,
+                    targetTime: targetTime.toISOString(),
+                    type: 'event'
                 };
-
-                const batch = db.batch();
-                
-                if (position === 'next') {
-                    newItemData.order = 1;
-                    upcomingQueue.forEach(item => {
-                        if(item.order >= 1) {
-                           batch.update(db.collection('queue').doc(item.id), { order: item.order + 1 });
-                        }
-                    });
-                } else { // 'last'
-                    newItemData.order = upcomingQueue.length;
-                }
-                
-                const newDocRef = db.collection('queue').doc();
-                batch.set(newDocRef, newItemData);
-                await batch.commit();
+                addToQueue(eventData, 'last');
             };
 
             const handleDeleteRequest = async (id) => { if (!db) return; await db.collection('requests').doc(id).delete(); };
-
-            const handleAddEventToQueue = (eventName, notes = '') => {
-                const upcomingQueue = queue.filter(q => !q.played);
-                db.collection('queue').add({ type: 'event', danceName: eventName, songName: notes, artist: '', order: upcomingQueue.length, played: false, likes: [], dislikes: [] });
-            };
-
-            const handleAddLineDanceLesson = async (danceName) => {
-                if (!db) return;
-                const upcomingQueue = queue.filter(q => !q.played);
-                await db.collection('queue').add({ type: 'event', danceName: 'Line Dance Lesson', songName: `Teaching: ${danceName}`, artist: '', order: upcomingQueue.length, played: false, likes: [], dislikes: [] });
-                setShowLineDanceLessonModal(false);
+            
+            const handleToolClick = (toolName) => {
+                 const timeBasedTools = ['Last Call', 'Closing Time'];
+                 if (timeBasedTools.includes(toolName)) {
+                     setDjToolModal({ show: true, tool: 'timeInput', title: `Set Time: ${toolName}`, eventName: toolName });
+                 } else if (toolName === 'AI Announcement') {
+                     setDjToolModal({ show: true, tool: 'AI Announcement', title: '✨ AI Announcement Generator' });
+                 }
+                 else {
+                     setDjToolModal({ show: true, tool: toolName, title: `DJ Request: ${toolName}` });
+                 }
             };
 
             const handleSaveTippingInfo = async (e) => {
@@ -1746,7 +2216,7 @@
             
             const handleQueueReorder = useCallback(async (dragIndex, dropIndex) => {
                 if (!db) return;
-                const upcomingQueue = queue.filter(item => !item.played);
+                const upcomingQueue = queue.filter(item => !item.played).sort((a,b) => a.order - b.order);
                 const newQueue = [...upcomingQueue];
                 const [draggedItem] = newQueue.splice(dragIndex, 1);
                 newQueue.splice(dropIndex, 0, draggedItem);
@@ -1756,7 +2226,7 @@
             }, [queue]);
 
             const handleMoveQueueItem = (index, direction) => {
-                const upcomingQueue = queue.filter(item => !item.played);
+                const upcomingQueue = queue.filter(item => !item.played).sort((a,b) => a.order - b.order);
                 if (direction === 'up' && index > 0) handleQueueReorder(index, index - 1);
                 else if (direction === 'down' && index < upcomingQueue.length - 1) handleQueueReorder(index, index + 1);
             };
@@ -1785,7 +2255,7 @@
                         const batch = db.batch();
                         batch.delete(db.collection('queue').doc(id));
                         
-                        const upcomingQueue = queue.filter(q => !q.played && q.id !== id);
+                        const upcomingQueue = queue.filter(q => !q.played && q.id !== id).sort((a,b) => a.order - b.order);
                         upcomingQueue.forEach((item, index) => {
                             if (item.order > itemToDelete.order) {
                                 batch.update(db.collection('queue').doc(item.id), { order: item.order - 1 });
@@ -1887,7 +2357,7 @@
                 if (data.type === 'request') {
                     await handleAddRequestToQueue(data.payload, 'last');
                 } else if (data.type === 'event') {
-                    handleAddEventToQueue(data.payload);
+                    handleToolClick(data.payload)
                 }
             };
 
@@ -1902,8 +2372,14 @@
                 });
             };
 
-            const upcomingQueue = queue.filter(item => !item.played);
-            const recentlyPlayedQueue = queue.filter(item => item.played);
+            const upcomingQueueSorted = [...queue]
+                .filter(item => !item.played)
+                .sort((a, b) => a.order - b.order);
+                
+            const recentlyPlayedQueue = [...queue]
+                .filter(item => item.played)
+                .sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
             const filteredRequests = requests.filter(req => 
                 (req.songName && req.songName.toLowerCase().includes(searchTerm.toLowerCase())) ||
                 (req.artist && req.artist.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -1912,6 +2388,47 @@
             );
             
             const currentDjDetails = activeDj?.name ? djs.find(dj => dj.name === activeDj.name) : null;
+            
+            const renderDjToolModal = () => {
+                if (!djToolModal.show) return null;
+                
+                const { tool, title, eventName } = djToolModal;
+
+                let content;
+                switch (tool) {
+                    case 'Line Dance':
+                        content = <LineRequestForm onAddToQueue={addToQueue} djName={loggedInDj?.name} lineDancesList={lineDances} />;
+                        break;
+                    case 'Line Dance Lesson':
+                        content = <DjLineDanceLessonForm onAddToQueue={addToQueue} djName={loggedInDj?.name} lineDancesList={lineDances} />;
+                        break;
+                    case 'Country Partner':
+                        content = <PartnerRequestForm onAddToQueue={addToQueue} djName={loggedInDj?.name} partnerDancesList={partnerDancesList} />;
+                        break;
+                    case 'West Coast':
+                        content = <PartnerRequestForm onAddToQueue={addToQueue} djName={loggedInDj?.name} initialDanceType="West Coast Swing" partnerDancesList={partnerDancesList} />;
+                        break;
+                    case 'timeInput':
+                        content = <TimeInputModal onConfirm={(time) => handleTimeEventConfirm(time, eventName)} eventName={eventName} />;
+                        break;
+                    case 'Custom Announcement':
+                        content = <AnnouncementForm onAddToQueue={addToQueue} />;
+                        break;
+                    case 'Birthday Shout-Out':
+                        content = <ShoutOutForm onAddToQueue={addToQueue} />;
+                        break;
+                    case 'AI Announcement':
+                        return <GeminiAnnouncementModal show={true} onClose={() => setDjToolModal({ show: false, tool: null })} />;
+                    default:
+                        content = null;
+                }
+                
+                return (
+                    <Modal show={true} onClose={() => setDjToolModal({ show: false, tool: null })} title={title}>
+                        {content}
+                    </Modal>
+                );
+            };
 
             if (!db) {
                 return (
@@ -1927,15 +2444,13 @@
                     return <AdminPanel djs={djs} onClose={() => setShowAdminPanel(false)} />;
                 }
                  if (showManageLineDances) {
-                    return <LineDanceManagement onClose={() => setShowManageLineDances(false)} onAddDanceToQueue={handleAddDanceToQueue} />;
+                    return <LineDanceManagement onClose={() => setShowManageLineDances(false)} onAddToQueue={addToQueue} />;
                 }
                 return (
                     <div className="bg-gray-900 text-white min-h-screen p-4 md:p-8">
                         {editingItem && <EditQueueItemModal item={editingItem} onSave={handleSaveEditedItem} onClose={() => setEditingItem(null)} />}
                         <ConfirmModal {...confirmState} onClose={() => setConfirmState({ ...confirmState, show: false })} />
-                        <PromptModal {...promptState} onClose={() => setPromptState({ ...promptState, show: false })} />
-                        <LineDanceLessonModal show={showLineDanceLessonModal} onClose={() => setShowLineDanceLessonModal(false)} onConfirm={handleAddLineDanceLesson} lineDancesList={lineDances} />
-                        <GeminiAnnouncementModal show={showGeminiModal} onClose={() => setShowGeminiModal(false)} />
+                        {renderDjToolModal()}
                         <ChangePasswordModal show={showChangePasswordModal} onClose={() => setShowChangePasswordModal(false)} onSave={handleChangePassword} />
 
                         <header className="flex justify-between items-center mb-6 pb-4 border-b-2 border-cyan-400">
@@ -1954,16 +2469,9 @@
                         </header>
                         <div className="flex flex-col lg:flex-row gap-8">
                             <div className="lg:w-1/2 flex flex-col gap-6">
-                                <div>
-                                    <h3 className="text-2xl font-semibold text-pink-400 mb-3">DJ Tools</h3>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button onClick={() => setShowGeminiModal(true)} className="bg-purple-600 hover:bg-purple-700 col-span-2 text-white font-semibold p-3 rounded-lg text-center">✨ Generate Announcement</button>
-                                        <button draggable onDragStart={(e) => handleDragStart(e, 'event', 'Line Dance Lesson')} onClick={() => setShowLineDanceLessonModal(true)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold p-3 rounded-lg text-center cursor-grab">Line Dance Lesson</button>
-                                        {['Line Dance', 'Country Partner', 'West Coast', 'Couples Dance', 'Last Call', 'Closing Time'].map(event => (
-                                            <button key={event} draggable onDragStart={(e) => handleDragStart(e, 'event', event)} onClick={() => handleAddEventToQueue(event)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold p-3 rounded-lg text-center cursor-grab">{event}</button>
-                                        ))}
-                                    </div>
-                                </div>
+                                
+                                <DjToolsPanel onToolClick={handleToolClick} onDragStart={handleDragStart} />
+
                                 <div>
                                     <h3 className="text-2xl font-semibold text-pink-400 mb-3">Submitted Requests ({filteredRequests.length})</h3>
                                     <input 
@@ -2026,7 +2534,7 @@
                                     {showDjHistory ? (
                                         <QueueList queue={recentlyPlayedQueue} isDjView={true} title="History" />
                                     ) : (
-                                        <QueueList queue={upcomingQueue} isDjView={true} onReorder={handleQueueReorder} onEdit={setEditingItem} onDelete={handleDeleteQueueItem} onMove={handleMoveQueueItem} onMarkAsPlayed={handleMarkAsPlayed} title="Queue" isUpcomingQueue={true} onDrop={handleDropOnQueue} onDragOver={(e) => e.preventDefault()} />
+                                        <QueueList queue={upcomingQueueSorted} isDjView={true} onReorder={handleQueueReorder} onEdit={setEditingItem} onDelete={handleDeleteQueueItem} onMove={handleMoveQueueItem} onMarkAsPlayed={handleMarkAsPlayed} title="Queue" isUpcomingQueue={true} onDrop={handleDropOnQueue} onDragOver={(e) => e.preventDefault()} />
                                     )}
                                 </div>
                             </div>
@@ -2072,7 +2580,7 @@
                             {activeDj?.name && <p className="text-lg text-gray-300">Your DJ is {activeDj.name}</p>}
                         </div>
                         <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
-                            <QueueList queue={upcomingQueue} isDjView={false} title="Queue" isUpcomingQueue={true} onVote={handleVote} votedSongs={votedSongs} />
+                            <QueueList queue={upcomingQueueSorted} isDjView={false} title="Queue" isUpcomingQueue={true} onVote={handleVote} votedSongs={votedSongs} />
                         </div>
 
                         {recentlyPlayedQueue.length > 0 && (
@@ -2086,7 +2594,7 @@
                         <TippingSection tippingInfo={currentDjDetails} />
                     </main>
                     <footer className="text-center mt-8 pt-4 border-t border-gray-700">
-                        <p className="text-gray-500">&copy; 2024 Neon Boots. All Rights Reserved.</p>
+                        <p className="text-gray-500">&copy; 2025 W. Justin Butterfras. All Rights Reserved.</p>
                     </footer>
                 </div>
             );
@@ -2098,3 +2606,4 @@
     </script>
 </body>
 </html>
+```
