@@ -1,15 +1,2693 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QJay.app at Neon Boots Dancehall and Saloon</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://www.gstatic.com">
+    <link rel="preconnect" href="https://neonbootsdjapp.firebaseapp.com">
+    <link rel="preconnect" href="https://qjay.app">
+
+    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Teko:wght@700&display=swap" rel="stylesheet">
-  </head>
-  <body class="bg-gray-900">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+    <style>
+        /* Custom font for the header to approximate the neon sign look */
+        .font-neon {
+            font-family: 'Teko', sans-serif;
+            text-shadow: 0 0 8px rgba(0, 255, 255, 0.5),
+                         0 0 16px rgba(255, 0, 255, 0.5);
+        }
+        .neon-checkmark {
+            filter: drop-shadow(0 0 3px #39ff14) drop-shadow(0 0 5px #39ff14);
+        }
+        .now-playing-glow {
+            box-shadow: 0 0 8px #00ffff, 0 0 12px #00ffff;
+        }
+        .rating-button {
+            transition: transform 0.1s ease-in-out;
+        }
+        .rating-button.selected {
+            transform: scale(1.25);
+        }
+        /* Simple spinner for loading states */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .user-id-text {
+            word-break: break-all;
+        }
+        .neon-pink-bg {
+            background-color: #ff00ff;
+        }
+        .neon-glow {
+            box-shadow: 0 0 5px #ff00ff, 0 0 10px #ff00ff;
+        }
+        /* Flashing animation for queue items */
+        @keyframes flash-red {
+            0%, 100% { background-color: #374151; } /* bg-gray-700 */
+            50% { background-color: #991b1b; } /* bg-red-800 */
+        }
+        .flashing {
+            animation: flash-red 1.5s infinite;
+        }
+        /* Styles for the initial static loader */
+        .static-loader-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gray-900">
+    <div id="root">
+        <div class="static-loader-container">
+            <div class="loader"></div>
+            <p class="mt-4">Loading the Dance Floor...</p>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" defer></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" defer></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js" defer></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-functions-compat.js" defer></script>
+
+
+    <script type="text/babel" defer>
+        // Since we're not using a bundler, we get React functions from the global 'React' object
+        const { useState, useEffect, useRef, useCallback, createContext, useContext } = React;
+        
+        // --- Gemini API Configuration ---
+        const GEMINI_API_KEY = "AIzaSyAipdQBpb0NXceFo4pQKp5Tb6LzytS_xbI";
+
+        // --- Firebase Configuration ---
+        // DO NOT MODIFY THESE. They are provided by the Canvas environment.
+        const firebaseConfig = {
+            apiKey: "AIzaSyBKmzMtCnEWIFEiq6WK6f1E4JTCkC2tnt0",
+            authDomain: "neonbootsdjapp.firebaseapp.com",
+            projectId: "neonbootsdjapp",
+            storageBucket: "neonbootsdjapp.appspot.com",
+            messagingSenderId: "916767461225",
+            appId: "1:916767461225:web:aa07f19c1719cba8d837f8",
+            measurementId: "G-P1KDRD91W3"
+        };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+
+        // --- Initialize Firebase (Compat Syntax) ---
+        let app;
+        let db;
+        let auth;
+        let functions;
+        try {
+            app = firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            auth = firebase.auth();
+            // Explicitly get functions from the app instance to ensure it's linked to the same auth state.
+            functions = app.functions('us-central1'); 
+        } catch (error) {
+            console.error("Firebase initialization error. Please provide your Firebase config.", error);
+        }
+
+        // --- Helper function to call Gemini API ---
+        const callGeminiAPI = async (prompt) => {
+            if (!GEMINI_API_KEY) {
+                console.error("Gemini API key is missing.");
+                return "Error: Gemini API key not configured. Please add it to the script.";
+            }
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+            
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.json();
+                    console.error("Gemini API Error:", errorBody);
+                    return `Error: ${errorBody.error.message}`;
+                }
+
+                const data = await response.json();
+                if (data.candidates && data.candidates.length > 0) {
+                    return data.candidates[0].content.parts[0].text;
+                }
+                return "No response from AI.";
+
+            } catch (error) {
+                console.error("Error calling Gemini API:", error);
+                return "An error occurred while contacting the AI.";
+            }
+        };
+
+        const partnerDancesList = [
+            { name: 'Two Step' },
+            { name: 'Triple Two' },
+            { name: 'Cha Cha' },
+            { name: 'Polka' },
+            { name: 'Waltz' },
+            { name: 'West Coast Swing' },
+            { name: 'East Coast Swing' },
+            { name: 'Night Club Two Step' },
+        ];
+
+        // --- React Components ---
+
+        const Modal = ({ show, onClose, title, children, bgColor = 'bg-gray-800' }) => {
+            if (!show) return null;
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-start overflow-y-auto p-4 pt-8">
+                    <div className={`${bgColor} rounded-lg shadow-xl w-full max-w-md p-6 relative mb-8`}>
+                        <h2 className="text-2xl font-bold text-pink-400 mb-4">{title}</h2>
+                        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl">&times;</button>
+                        {children}
+                    </div>
+                </div>
+            );
+        };
+
+        const ConfirmModal = ({ show, onClose, onConfirm, title, message }) => {
+            if (!show) return null;
+            return (
+                <Modal show={show} onClose={onClose} title={title}>
+                    <p className="text-gray-300 mb-6">{message}</p>
+                    <div className="flex justify-end gap-4">
+                        <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
+                        <button onClick={onConfirm} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Confirm</button>
+                    </div>
+                </Modal>
+            );
+        };
+        
+        const GeminiAnnouncementModal = ({ show, onClose }) => {
+            const [topic, setTopic] = useState('');
+            const [announcement, setAnnouncement] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+
+            if (!show) return null;
+
+            const handleGenerate = async () => {
+                if (!topic) return;
+                setIsLoading(true);
+                setAnnouncement('');
+                const prompt = `You are a fun, high-energy country western DJ at a club called Neon Boots. Write a short, fun announcement for the following topic: "${topic}". Keep it under 30 seconds to read.`;
+                const result = await callGeminiAPI(prompt);
+                setAnnouncement(result);
+                setIsLoading(false);
+            };
+            
+            const handleCopyToClipboard = () => {
+                navigator.clipboard.writeText(announcement);
+            };
+
+            return (
+                <Modal show={show} onClose={onClose} title="✨ AI Announcement Generator">
+                    <p className="text-gray-300 mb-4">Enter a topic and let the AI craft a fun announcement!</p>
+                    <input 
+                        type="text" 
+                        value={topic} 
+                        onChange={(e) => setTopic(e.target.value)} 
+                        className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 mb-4"
+                        placeholder="e.g., Last Call, Birthday for Sarah"
+                    />
+                    <button onClick={handleGenerate} disabled={isLoading || !topic} className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg w-full disabled:opacity-50 flex justify-center items-center">
+                        {isLoading ? <div className="loader"></div> : 'Generate Announcement'}
+                    </button>
+                    
+                    {announcement && (
+                        <div className="mt-6 bg-gray-900 p-4 rounded-lg">
+                            <h4 className="text-lg font-semibold text-cyan-300 mb-2">Generated Announcement:</h4>
+                            <p className="text-gray-200 whitespace-pre-wrap">{announcement}</p>
+                            <button onClick={handleCopyToClipboard} className="text-xs bg-gray-600 hover:bg-gray-500 text-white font-bold py-1 px-2 rounded mt-3">Copy Text</button>
+                        </div>
+                    )}
+                </Modal>
+            );
+        };
+
+        const RequestForm = ({ onClose, tippingInfo, formType, lineDancesList = [], openTippingModal }) => {
+            const [danceName, setDanceName] = useState('');
+            const [songName, setSongName] = useState('');
+            const [artist, setArtist] = useState('');
+            const [spotifyLink, setSpotifyLink] = useState('');
+            const [stepSheetUrl, setStepSheetUrl] = useState('');
+            const [customerName, setCustomerName] = useState('');
+            const [showThanksModal, setShowThanksModal] = useState(false);
+            const [songSuggestions, setSongSuggestions] = useState([]);
+            const [isSuggesting, setIsSuggesting] = useState(false);
+
+            // New state for the custom search/dropdown
+            const [lineDanceSearch, setLineDanceSearch] = useState('');
+            const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+            const dropdownRef = useRef(null);
+
+            const isLineDance = formType === 'line';
+
+            // Handler for selecting a line dance from the custom dropdown
+            const handleLineDanceSelect = (dance) => {
+                setDanceName(dance.danceName || '');
+                setSongName(dance.songTitle || '');
+                setArtist(dance.songArtist || '');
+                setStepSheetUrl(dance.stepSheetLink || '');
+                setLineDanceSearch(dance.danceName); // Show the selected dance name in the input for clarity
+                setIsDropdownOpen(false);
+            };
+
+            // Original handler for partner dance select
+            const handlePartnerDanceSelect = (e) => {
+                const selectedDanceName = e.target.value;
+                const dance = partnerDancesList.find(d => d.name === selectedDanceName);
+                if (dance) {
+                    setDanceName(dance.name);
+                    setSongName('');
+                    setArtist('');
+                } else {
+                    setDanceName('');
+                }
+            };
+            
+            // Filtered list for the line dance dropdown
+            const filteredLineDances = lineDanceSearch
+                ? lineDancesList.filter(dance =>
+                    (dance.danceName && dance.danceName.toLowerCase().includes(lineDanceSearch.toLowerCase())) ||
+                    (dance.songTitle && dance.songTitle.toLowerCase().includes(lineDanceSearch.toLowerCase())) ||
+                    (dance.songArtist && dance.songArtist.toLowerCase().includes(lineDanceSearch.toLowerCase()))
+                )
+                : lineDancesList;
+
+            // Effect to handle clicks outside the dropdown to close it
+            useEffect(() => {
+                const handleClickOutside = (event) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                        setIsDropdownOpen(false);
+                    }
+                };
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => {
+                    document.removeEventListener("mousedown", handleClickOutside);
+                };
+            }, [dropdownRef]);
+
+            const handleSuggestSongs = async () => {
+                if (!danceName) return;
+                setIsSuggesting(true);
+                setSongSuggestions([]);
+                const prompt = `Suggest 3 popular country songs for a '${danceName}' dance. Provide just the song title and artist, each on a new line, like 'Song Title - Artist'. Do not add numbers or bullets.`;
+                const result = await callGeminiAPI(prompt);
+                const suggestions = result.split('\n').filter(s => s.trim() !== '');
+                setSongSuggestions(suggestions);
+                setIsSuggesting(false);
+            };
+            
+            const handleSelectSuggestion = (suggestion) => {
+                const parts = suggestion.split(' - ');
+                if (parts.length === 2) {
+                    setSongName(parts[0].trim());
+                    setArtist(parts[1].trim());
+                }
+                setSongSuggestions([]);
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!customerName || !db) return;
+                try {
+                    const requestData = { 
+                        danceName, 
+                        songName, 
+                        artist, 
+                        spotifyLink, 
+                        customerName, 
+                        createdAt: new Date() 
+                    };
+                    if (isLineDance) {
+                        requestData.stepSheetUrl = stepSheetUrl;
+                    }
+                    await db.collection('requests').add(requestData);
+                    setShowThanksModal(true);
+                } catch (error) {
+                    console.error("Error adding request: ", error);
+                }
+            };
+
+            if (showThanksModal) {
+                return (
+                    <div className="text-center">
+                        <h2 className="text-2xl font-bold text-pink-400 mb-4">Thank You!</h2>
+                        <p className="text-gray-200 mb-4">Your request has been sent to the DJ.</p>
+                        <TippingSection tippingInfo={tippingInfo} openTippingModal={openTippingModal} />
+                        <button onClick={() => { setShowThanksModal(false); onClose(); }} className="mt-4 bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg w-full">Close</button>
+                    </div>
+                );
+            }
+
+            return (
+                <form onSubmit={handleSubmit}>
+                    <p className="text-gray-300 mb-4 text-center">Enter as much as you know, the more the better!</p>
+                    
+                    {isLineDance ? (
+                        <div className="mb-4 relative" ref={dropdownRef}>
+                            <label htmlFor="dance-search" className="block text-cyan-300 text-sm font-bold mb-2">Quick Select a Line Dance</label>
+                            <input
+                                id="dance-search"
+                                type="text"
+                                value={lineDanceSearch}
+                                onChange={(e) => {
+                                    setLineDanceSearch(e.target.value);
+                                    setIsDropdownOpen(true);
+                                    if (e.target.value !== danceName) {
+                                        setDanceName('');
+                                        setSongName('');
+                                        setArtist('');
+                                        setStepSheetUrl('');
+                                    }
+                                }}
+                                onFocus={() => setIsDropdownOpen(true)}
+                                placeholder={lineDancesList.length > 0 ? "Search by dance, song, or artist..." : "Dances coming soon..."}
+                                autoComplete="off"
+                                disabled={lineDancesList.length === 0}
+                                className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                            />
+                            {isDropdownOpen && filteredLineDances.length > 0 && (
+                                <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                    {filteredLineDances.map(dance => (
+                                        <div
+                                            key={dance.id}
+                                            onClick={() => handleLineDanceSelect(dance)}
+                                            className="px-4 py-2 text-white hover:bg-gray-700 cursor-pointer"
+                                        >
+                                            <p className="font-bold">{dance.danceName}</p>
+                                            <p className="text-sm text-gray-400">{dance.songTitle} - {dance.songArtist}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="mb-4">
+                            <label htmlFor="dance-select" className="block text-cyan-300 text-sm font-bold mb-2">Quick Select a Dance Style</label>
+                            <select id="dance-select" onChange={handlePartnerDanceSelect} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
+                                <option value="">-- Select a Dance --</option>
+                                {partnerDancesList.map(dance => <option key={dance.name} value={dance.name}>{dance.name}</option>)}
+                            </select>
+                        </div>
+                    )}
+
+                    <p className="text-center text-gray-400 my-2">OR</p>
+                    
+                    <div className="mb-4">
+                        <label htmlFor="dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style</label>
+                        <input type="text" id="dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song Name</label>
+                        <div className="flex items-center gap-2">
+                           <input type="text" id="song-name" value={songName} onChange={e => setSongName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                           {!isLineDance && (
+                                <button type="button" onClick={handleSuggestSongs} disabled={!danceName || isSuggesting} className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-3 rounded-lg disabled:opacity-50 text-sm whitespace-nowrap">
+                                    {isSuggesting ? '...' : '✨ Suggest'}
+                                </button>
+                           )}
+                        </div>
+                         {songSuggestions.length > 0 && (
+                            <div className="mt-2 bg-gray-700 border border-gray-600 rounded-lg p-2">
+                                <p className="text-xs text-gray-300 mb-2">Tap to select:</p>
+                                {songSuggestions.map((s, i) => (
+                                    <button type="button" key={i} onClick={() => handleSelectSuggestion(s)} className="block w-full text-left p-1 text-cyan-300 hover:bg-gray-600 rounded text-sm">{s}</button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist</label>
+                        <input type="text" id="artist-name" value={artist} onChange={e => setArtist(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    {isLineDance && (
+                        <div className="mb-4">
+                            <label htmlFor="step-sheet-url" className="block text-cyan-300 text-sm font-bold mb-2">Step Sheet URL (Optional)</label>
+                            <input type="url" id="step-sheet-url" value={stepSheetUrl} onChange={e => setStepSheetUrl(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                    )}
+                    <div className="mb-4">
+                        <label htmlFor="spotify-link" className="block text-cyan-300 text-sm font-bold mb-2">Spotify Link (Optional)</label>
+                        <input type="url" id="spotify-link" value={spotifyLink} onChange={e => setSpotifyLink(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="customer-name" className="block text-cyan-300 text-sm font-bold mb-2">Your Name*</label>
+                        <input type="text" id="customer-name" value={customerName} onChange={e => setCustomerName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <button type="submit" className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg w-full">Submit Request</button>
+                </form>
+            );
+        };
+        
+        const PromptModal = ({ show, onClose, onConfirm, title, message }) => {
+            const [inputValue, setInputValue] = useState('');
+            if (!show) return null;
+
+            const handleConfirm = () => {
+                onConfirm(inputValue);
+                setInputValue('');
+            };
+
+            return (
+                <Modal show={show} onClose={onClose} title={title}>
+                    <p className="text-gray-300 mb-4">{message}</p>
+                    <input 
+                        type="text" 
+                        value={inputValue} 
+                        onChange={(e) => setInputValue(e.target.value)} 
+                        className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 mb-6"
+                        placeholder="Optional notes..."
+                    />
+                    <div className="flex justify-end gap-4">
+                        <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
+                        <button onClick={handleConfirm} className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg">Add Event</button>
+                    </div>
+                </Modal>
+            );
+        };
+        
+        const LineDanceLessonModal = ({ show, onClose, onConfirm, lineDancesList }) => {
+            const [selectedDance, setSelectedDance] = useState('');
+            if (!show) return null;
+
+            const handleConfirm = () => {
+                if (selectedDance) {
+                    onConfirm(selectedDance);
+                }
+            };
+
+            return (
+                <Modal show={show} onClose={onClose} title="Select Dance for Lesson">
+                    <p className="text-gray-300 mb-4">Which dance will be taught?</p>
+                    <select value={selectedDance} onChange={e => setSelectedDance(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 mb-6">
+                        <option value="">-- Select a Dance --</option>
+                        {lineDancesList.map(dance => <option key={dance.id} value={dance.danceName}>{dance.danceName}</option>)}
+                    </select>
+                    <div className="flex justify-end gap-4">
+                        <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
+                        <button onClick={handleConfirm} disabled={!selectedDance} className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg disabled:opacity-50">Add Lesson</button>
+                    </div>
+                </Modal>
+            );
+        };
+
+        const TippingSection = ({ tippingInfo, openTippingModal }) => {
+            if (!tippingInfo || (!tippingInfo.venmo && !tippingInfo.cashapp)) {
+                return null;
+            }
+            return (
+                 <div className="border-t border-gray-700 pt-4 mt-8 text-center">
+                    <p className="text-lg text-cyan-300 font-semibold mb-2">Enjoying the music? Tip the DJ!</p>
+                    <button onClick={openTippingModal} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-4 rounded-lg transition-colors">
+                        Tip the DJ
+                    </button>
+                </div>
+            );
+        };
+        
+        const TippingModal = ({ show, onClose, tippingInfo }) => {
+            if (!show || !tippingInfo) return null;
+
+            return (
+                <Modal show={show} onClose={onClose} title="Tip the DJ">
+                    <div className="text-center">
+                        <p className="text-lg text-cyan-300 font-semibold mb-4">Your support is appreciated!</p>
+                        {tippingInfo.venmo && 
+                            <a href={`https://venmo.com/${tippingInfo.venmo}`} target="_blank" rel="noopener noreferrer" className="block w-full text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-3 my-3 text-lg">
+                                Venmo: @{tippingInfo.venmo}
+                            </a>
+                        }
+                        {tippingInfo.cashapp && 
+                            <a href={`https://cash.app/$${tippingInfo.cashapp}`} target="_blank" rel="noopener noreferrer" className="block w-full text-white bg-green-500 hover:bg-green-600 rounded-lg px-4 py-3 my-3 text-lg">
+                                Cash App: ${tippingInfo.cashapp}
+                            </a>
+                        }
+                    </div>
+                </Modal>
+            );
+        };
+
+        const DJLogin = ({ onLogin }) => {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                setError('');
+                setIsLoading(true);
+                try {
+                    await auth.signInWithEmailAndPassword(email, password);
+                    // onLogin will be triggered by the onAuthStateChanged listener in the App component
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            return (
+                <form onSubmit={handleLogin}>
+                    {error && <p className="text-red-500 text-center mb-4">{error}</p>}
+                    <div className="mb-4">
+                        <label htmlFor="dj-email" className="block text-cyan-300 text-sm font-bold mb-2">DJ Email</label>
+                        <input 
+                            type="email" 
+                            id="dj-email" 
+                            value={email} 
+                            onChange={e => setEmail(e.target.value)} 
+                            required 
+                            className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600"
+                        />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="dj-password" className="block text-cyan-300 text-sm font-bold mb-2">Password</label>
+                        <input 
+                            type="password" 
+                            id="dj-password" 
+                            value={password} 
+                            onChange={e => setPassword(e.target.value)} 
+                            required 
+                            className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600"
+                        />
+                    </div>
+                    <button 
+                        type="submit" 
+                        disabled={isLoading}
+                        className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg w-full disabled:opacity-50 flex justify-center items-center"
+                    >
+                        {isLoading ? <div className="loader"></div> : 'Login'}
+                    </button>
+                </form>
+            );
+        };
+
+        const QueueList = ({ queue, isDjView, onReorder, onEdit, onDelete, onMove, onMarkAsPlayed, title, isUpcomingQueue, onVote, votedSongs = [], onDrop, onDragOver, user }) => {
+            const dragItem = useRef(null);
+            const dragOverItem = useRef(null);
+
+            const handleDragStart = (e, index) => {
+                dragItem.current = index;
+                e.dataTransfer.effectAllowed = 'move';
+            };
+            const handleDragEnter = (e, index) => { dragOverItem.current = index; };
+            const handleDragEnd = () => {
+                if (dragItem.current !== null && dragOverItem.current !== null && dragItem.current !== dragOverItem.current) {
+                    onReorder(dragItem.current, dragOverItem.current);
+                }
+                dragItem.current = null;
+                dragOverItem.current = null;
+            };
+            
+            if (queue.length === 0 && !isDjView) {
+                return <div className="text-center text-gray-400 py-8">The {title.toLowerCase()} is currently empty.</div>
+            }
+
+            return (
+                <div className="space-y-3" onDrop={onDrop} onDragOver={onDragOver}>
+                    {queue.map((item, index) => {
+                        const isNowPlaying = isUpcomingQueue && index === 0;
+                        const totalVotes = (item.likes?.length || 0) + (item.dislikes?.length || 0);
+                        const likePercentage = totalVotes > 0 ? Math.round(((item.likes?.length || 0) / totalVotes) * 100) : null;
+                        const canVote = !isDjView && item.type === 'song' && user;
+                        const currentVote = votedSongs.find(v => v.id === item.id)?.vote;
+
+                        // Border Color Logic
+                        let borderColorClass = 'border-transparent';
+                        if (item.danceName === 'West Coast Swing') {
+                            borderColorClass = 'border-yellow-500';
+                        } else {
+                            const isPartnerDance = partnerDancesList.some(p => p.name === item.danceName);
+                            const isLineDance = (item.type === 'song' || !item.type) && item.danceName && !isPartnerDance;
+                            if (isPartnerDance) borderColorClass = 'border-teal-400';
+                            else if (isLineDance) borderColorClass = 'border-pink-500';
+                        }
+
+                        let bgColorClass = 'bg-gray-700';
+                        if (item.type === 'event') bgColorClass = 'bg-indigo-700';
+                        if (item.type === 'announcement') bgColorClass = 'bg-green-700';
+                        if (item.type === 'shout-out') bgColorClass = 'bg-purple-700';
+                        if (item.type === 'lesson') bgColorClass = 'bg-pink-700';
+
+                        const itemContent = (
+                            <div 
+                                className={`flex items-center gap-4 p-3 rounded-lg shadow-md transition-all border-l-4
+                                    ${bgColorClass}
+                                    ${item.played ? 'opacity-50' : ''}
+                                    ${isDjView && !item.played ? 'cursor-move' : ''}
+                                    ${item.flashing ? 'flashing' : ''}
+                                    ${borderColorClass}`}
+                                draggable={isDjView && !item.played}
+                                onDragStart={(e) => handleDragStart(e, index)}
+                                onDragEnter={(e) => handleDragEnter(e, index)}
+                                onDragEnd={handleDragEnd}
+                                onDragOver={(e) => e.preventDefault()}
+                            >
+                                <div className="text-2xl font-bold text-cyan-300 w-8 text-center">{index + 1}</div>
+                                <div className="w-12 h-12 bg-gray-800 rounded-md flex items-center justify-center text-3xl text-gray-500">
+                                    {item.spotifyLink ? (
+                                        <a href={item.spotifyLink} target="_blank" rel="noopener noreferrer" title="Listen on Spotify">
+                                            <svg className="h-8 w-8 text-green-400 hover:text-green-300" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.423 13.923c-.213.32-.633.426-.953.213-2.66-1.633-6.003-1.996-9.98-1.093-.426.093-.853-.173-.946-.6-.093-.426.173-.853.6-.946 4.346-.986 8.08-.55 10.996 1.28.32.213.426.633.213.953zm.64-2.453c-.266.373-.76.48-1.133.213-2.986-1.813-7.466-2.346-11.186-1.28-.48.12-.986-.186-1.106-.666-.12-.48.186-.986.666-1.106 4.16-1.186 9.013-.593 12.386 1.493.373.267.48.76.213 1.133zm.107-2.56c-.32.426-.88.56-1.306.24-3.466-2.106-9.252-2.293-12.919-1.253-.56.133-1.12-.213-1.253-.773-.133-.56.213-1.12.773-1.253 4.186-1.146 10.452-.933 14.36 1.493.426.32.56.88.24 1.306z"/>
+                                            </svg>
+                                        </a>
+                                    ) : '🎵'}
+                                </div>
+                                <div className="flex-grow">
+                                    {['announcement', 'shout-out', 'lesson', 'event'].includes(item.type) ? (
+                                        // Display for Events/Announcements
+                                        <>
+                                            <p className="font-bold text-lg text-white">
+                                                {item.danceName}
+                                            </p>
+                                            <p className="text-sm text-gray-300">{item.songName}</p>
+                                            <p className="text-xs text-gray-400">{item.artist}</p>
+                                        </>
+                                    ) : (
+                                        // Display for Songs
+                                        <>
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-bold text-lg text-cyan-300">
+                                                    {item.songName || item.danceName}
+                                                </p>
+                                            </div>
+                                            {item.danceName && item.songName && (
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-sm text-gray-300">
+                                                        ({item.danceName})
+                                                    </p>
+                                                </div>
+                                            )}
+                                            <p className="text-xs text-gray-400">{item.artist}</p>
+                                        </>
+                                    )}
+                                    {item.stepSheetUrl && (
+                                        <a href={item.stepSheetUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white text-xs font-semibold px-2 py-0.5 mt-1 inline-block rounded-md hover:bg-purple-700">
+                                            step sheet
+                                        </a>
+                                    )}
+                                </div>
+                                {canVote && (
+                                    <div className="flex gap-2">
+                                        <button onClick={() => onVote(item.id, 'like')} className={`rating-button text-2xl ${currentVote === 'like' ? 'selected' : ''}`}>👍</button>
+                                        <button onClick={() => onVote(item.id, 'dislike')} className={`rating-button text-2xl ${currentVote === 'dislike' ? 'selected' : ''}`}>👎</button>
+                                    </div>
+                                )}
+                                {isDjView && (
+                                    <div className="flex flex-col md:flex-row items-center gap-2">
+                                        {likePercentage !== null && <div className="text-sm font-bold text-green-400">{likePercentage}% 👍</div>}
+                                        {!item.played && (
+                                            <button onClick={() => onMarkAsPlayed(item.id)} className="text-green-400 hover:text-green-300 p-1 rounded-full neon-checkmark" title="Mark as Played">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                        <div className="flex flex-col">
+                                            <button onClick={() => onMove(index, 'up')} className="text-gray-300 hover:text-white" disabled={item.played}>▲</button>
+                                            <button onClick={() => onMove(index, 'down')} className="text-gray-300 hover:text-white" disabled={item.played}>▼</button>
+                                        </div>
+                                        <button onClick={() => onEdit(item)} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded text-xs">Edit</button>
+                                        <button onClick={() => onDelete(item.id)} className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-xs">Delete</button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+
+                        if (isNowPlaying) {
+                            return (
+                                <div key={item.id} className="border-2 border-cyan-400 rounded-lg p-2 now-playing-glow">
+                                    <p className="text-center font-bold text-cyan-300 text-sm animate-pulse pb-2">NOW PLAYING</p>
+                                    {itemContent}
+                                </div>
+                            );
+                        }
+
+                        return <div key={item.id}>{itemContent}</div>;
+                    })}
+                </div>
+            );
+        };
+
+        const EditQueueItemModal = ({ item, onSave, onClose }) => {
+            const [danceName, setDanceName] = useState(item.danceName);
+            const [songName, setSongName] = useState(item.songName);
+            const [artist, setArtist] = useState(item.artist);
+
+            const handleSave = (e) => {
+                e.preventDefault();
+                onSave({ ...item, danceName, songName, artist });
+            };
+
+            return (
+                <Modal show={true} onClose={onClose} title="Edit Queue Item">
+                    <form onSubmit={handleSave}>
+                        <div className="mb-4">
+                            <label htmlFor="edit-dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style</label>
+                            <input type="text" id="edit-dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                        <div className="mb-4">
+                            <label htmlFor="edit-song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song/Event Info</label>
+                            <input type="text" id="edit-song-name" value={songName} onChange={e => setSongName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                        <div className="mb-4">
+                            <label htmlFor="edit-artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist</label>
+                            <input type="text" id="edit-artist-name" value={artist} onChange={e => setArtist(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                        <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg w-full">Save Changes</button>
+                    </form>
+                </Modal>
+            );
+        };
+
+        const AdminPanel = ({ djs, onClose }) => {
+            const [editingDj, setEditingDj] = useState(null);
+            const [newDjName, setNewDjName] = useState('');
+            const [newDjEmail, setNewDjEmail] = useState('');
+            const [newDjPassword, setNewDjPassword] = useState('');
+            const [newDjRole, setNewDjRole] = useState('dj');
+            const [confirmDelete, setConfirmDelete] = useState(null);
+            const [error, setError] = useState('');
+            const [success, setSuccess] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+
+            const handleAddNewDj = async (e) => {
+                e.preventDefault();
+                if (!newDjName || !newDjEmail || !newDjPassword) return;
+                setError('');
+                setSuccess('');
+                setIsLoading(true);
+
+                try {
+                    // **FIX**: Force a refresh of the user's ID token before calling the function.
+                    // This ensures the latest authentication state (and admin role) is sent.
+                    if (auth.currentUser) {
+                        await auth.currentUser.getIdToken(true);
+                    }
+
+                    const createNewDjFunction = functions.httpsCallable('createNewDj');
+                    const result = await createNewDjFunction({
+                        email: newDjEmail,
+                        password: newDjPassword,
+                        name: newDjName,
+                        role: newDjRole,
+                    });
+                    
+                    setSuccess(result.data.message);
+                    setNewDjName('');
+                    setNewDjEmail('');
+                    setNewDjPassword('');
+                    setNewDjRole('dj');
+                } catch (err) {
+                    console.error("Error calling createNewDj function:", err);
+                    setError(err.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const handleUpdateDj = async (dj) => {
+                if (!db) return;
+                const { id, ...data } = dj;
+                await db.collection('djs').doc(id).update(data);
+                setEditingDj(null);
+            };
+
+            const handleDeleteDj = async (id) => {
+                if (!db) return;
+                // Deleting from Firestore. Deleting from Auth requires a backend.
+                await db.collection('djs').doc(id).delete();
+                console.warn(`DJ document ${id} deleted from Firestore. You must manually delete the corresponding user from the Firebase Authentication console.`);
+                setConfirmDelete(null);
+            };
+
+            return (
+                <div className="bg-gray-900 text-white min-h-screen p-4 md:p-8">
+                    {error && <p className="text-red-500 text-center mb-4">{error}</p>}
+                    {success && <p className="text-green-500 text-center mb-4">{success}</p>}
+                    {confirmDelete && <ConfirmModal show={true} onClose={() => setConfirmDelete(null)} onConfirm={() => handleDeleteDj(confirmDelete.id)} title="Delete DJ" message={`Are you sure you want to delete ${confirmDelete.name}? This also requires manual deletion from Firebase Auth.`} />}
+                    {editingDj && (
+                        <Modal show={true} onClose={() => setEditingDj(null)} title={`Edit DJ: ${editingDj.name}`}>
+                            <form onSubmit={(e) => { e.preventDefault(); handleUpdateDj(editingDj); }}>
+                                {/* Edit form fields */}
+                                <div className="mb-4">
+                                    <label className="block text-cyan-300 text-sm font-bold mb-2">Name</label>
+                                    <input type="text" value={editingDj.name} onChange={e => setEditingDj({...editingDj, name: e.target.value})} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white" />
+                                </div>
+                                <div className="mb-4">
+                                    <label className="block text-cyan-300 text-sm font-bold mb-2">Role</label>
+                                    <select value={editingDj.role} onChange={e => setEditingDj({...editingDj, role: e.target.value})} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white">
+                                        <option value="dj">DJ</option>
+                                        <option value="admin">Admin</option>
+                                    </select>
+                                </div>
+                                 <div className="mb-4">
+                                    <label className="block text-cyan-300 text-sm font-bold mb-2">Venmo</label>
+                                    <input type="text" value={editingDj.venmo} onChange={e => setEditingDj({...editingDj, venmo: e.target.value})} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white" />
+                                </div>
+                                 <div className="mb-4">
+                                    <label className="block text-cyan-300 text-sm font-bold mb-2">Cash App</label>
+                                    <input type="text" value={editingDj.cashapp} onChange={e => setEditingDj({...editingDj, cashapp: e.target.value})} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white" />
+                                </div>
+                                <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg w-full">Save Changes</button>
+                            </form>
+                        </Modal>
+                    )}
+                    <header className="flex justify-between items-center mb-6 pb-4 border-b-2 border-yellow-400">
+                        <h1 className="text-3xl md:text-4xl font-bold text-yellow-400">Admin Panel</h1>
+                        <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Back to Console</button>
+                    </header>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <h2 className="text-2xl font-semibold text-pink-400 mb-4">Add New DJ</h2>
+                            <form onSubmit={handleAddNewDj} className="bg-gray-800 p-4 rounded-lg space-y-4">
+                                <input type="text" value={newDjName} onChange={e => setNewDjName(e.target.value)} placeholder="DJ Name" required className="w-full p-2 bg-gray-700 rounded border border-gray-600" />
+                                <input type="email" value={newDjEmail} onChange={e => setNewDjEmail(e.target.value)} placeholder="DJ Email" required className="w-full p-2 bg-gray-700 rounded border border-gray-600" />
+                                <input type="password" value={newDjPassword} onChange={e => setNewDjPassword(e.target.value)} placeholder="Password" required className="w-full p-2 bg-gray-700 rounded border border-gray-600" />
+                                <select value={newDjRole} onChange={e => setNewDjRole(e.target.value)} className="w-full p-2 bg-gray-700 rounded border border-gray-600">
+                                    <option value="dj">DJ</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                                <button type="submit" disabled={isLoading} className="w-full bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg disabled:opacity-50 flex justify-center items-center">
+                                    {isLoading ? <div className="loader"></div> : 'Add DJ'}
+                                </button>
+                            </form>
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-semibold text-pink-400 mb-4">Manage DJs</h2>
+                            <div className="space-y-3">
+                                {djs.map(dj => (
+                                    <div key={dj.id} className="bg-gray-800 p-3 rounded-lg flex justify-between items-center">
+                                        <div>
+                                            <p className="font-bold text-lg text-cyan-300">{dj.name}</p>
+                                            <p className="text-sm text-gray-400">Role: {dj.role}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setEditingDj(dj)} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-3 rounded text-sm">Edit</button>
+                                            <button onClick={() => setConfirmDelete(dj)} className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm">Delete</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        const ChangePasswordModal = ({ show, onClose, onSave }) => {
+            const [newPassword, setNewPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSave = () => {
+                if (newPassword !== confirmPassword) {
+                    setError("Passwords do not match.");
+                    return;
+                }
+                if (newPassword.length < 6) {
+                    setError("Password must be at least 6 characters long.");
+                    return;
+                }
+                onSave(newPassword);
+                onClose();
+            };
+
+            return (
+                <Modal show={show} onClose={onClose} title="Change Password">
+                    {error && <p className="text-red-400 text-center mb-4">{error}</p>}
+                    <div className="mb-4">
+                        <label className="block text-cyan-300 text-sm font-bold mb-2">New Password</label>
+                        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white" />
+                    </div>
+                    <div className="mb-6">
+                        <label className="block text-cyan-300 text-sm font-bold mb-2">Confirm New Password</label>
+                        <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white" />
+                    </div>
+                    <button onClick={handleSave} className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg w-full">Save New Password</button>
+                </Modal>
+            );
+        };
+
+        // UI for adding/editing a dance
+        const DanceForm = ({ danceToEdit, onSave, onClose }) => {
+            const [danceData, setDanceData] = useState(danceToEdit || {
+                danceName: '',
+                songTitle: '',
+                songArtist: '',
+                stepSheetLink: '',
+                difficulty: 'Beginner',
+                isBeginnerFriendly: false,
+            });
+
+            const handleChange = (e) => {
+                const { name, value, type, checked } = e.target;
+                setDanceData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+            };
+
+            const handleSubmit = (e) => onSave(e, danceData);
+
+            return (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-cyan-300">Dance Name</label>
+                        <input type="text" name="danceName" value={danceData.danceName} onChange={handleChange} required className="mt-1 block w-full rounded-md bg-gray-700 text-white border-gray-600 shadow-sm focus:border-cyan-400 focus:ring focus:ring-cyan-400 focus:ring-opacity-50" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-cyan-300">Song Title</label>
+                        <input type="text" name="songTitle" value={danceData.songTitle} onChange={handleChange} className="mt-1 block w-full rounded-md bg-gray-700 text-white border-gray-600 shadow-sm focus:border-cyan-400 focus:ring focus:ring-cyan-400 focus:ring-opacity-50" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-cyan-300">Song Artist</label>
+                        <input type="text" name="songArtist" value={danceData.songArtist} onChange={handleChange} className="mt-1 block w-full rounded-md bg-gray-700 text-white border-gray-600 shadow-sm focus:border-cyan-400 focus:ring focus:ring-cyan-400 focus:ring-opacity-50" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-cyan-300">Step Sheet Link</label>
+                        <input type="url" name="stepSheetLink" value={danceData.stepSheetLink} onChange={handleChange} className="mt-1 block w-full rounded-md bg-gray-700 text-white border-gray-600 shadow-sm focus:border-cyan-400 focus:ring focus:ring-cyan-400 focus:ring-opacity-50" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-cyan-300">Difficulty</label>
+                        <select name="difficulty" value={danceData.difficulty} onChange={handleChange} className="mt-1 block w-full rounded-md bg-gray-700 text-white border-gray-600 shadow-sm focus:border-cyan-400 focus:ring focus:ring-cyan-400 focus:ring-opacity-50">
+                            <option value="Beginner">Beginner</option>
+                            <option value="Improver">Improver</option>
+                            <option value="Intermediate">Intermediate</option>
+                            <option value="Advanced">Advanced</option>
+                        </select>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <input type="checkbox" id="isBeginnerFriendly" name="isBeginnerFriendly" checked={danceData.isBeginnerFriendly} onChange={handleChange} className="form-checkbox text-blue-500 bg-gray-700 rounded-md focus:ring-cyan-400" />
+                        <label htmlFor="isBeginnerFriendly" className="text-sm font-medium text-cyan-300">Beginner Friendly</label>
+                    </div>
+                    <div className="flex justify-end space-x-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-white bg-gray-600 rounded-lg hover:bg-gray-700">Cancel</button>
+                        <button type="submit" className="px-4 py-2 text-gray-900 bg-cyan-500 rounded-lg hover:bg-cyan-600">Save</button>
+                    </div>
+                </form>
+            );
+        };
+
+        // --- Main Line Dance Management Component ---
+        const LineDanceManagement = ({ onClose, onAddToQueue }) => {
+            const [lineDances, setLineDances] = useState([]);
+            const [queue, setQueue] = useState([]);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [editingDance, setEditingDance] = useState(null);
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [confirmDelete, setConfirmDelete] = useState(null);
+            const [importDataModalOpen, setImportDataModalOpen] = useState(false);
+            const [isLoading, setIsLoading] = useState(true);
+            const [importing, setImporting] = useState(false);
+            const [importText, setImportText] = useState('');
+            const [viewMode, setViewMode] = useState('table'); // 'table' or 'card'
+            const [sortBy, setSortBy] = useState({ field: 'danceName', direction: 'asc' });
+            const [showBeginnerFriendlyOnly, setShowBeginnerFriendlyOnly] = useState(false);
+            const [selectedDances, setSelectedDances] = useState(new Set());
+            const [confirmBulkDelete, setConfirmBulkDelete] = useState(null);
+            const [bulkEditMode, setBulkEditMode] = useState(false);
+            const [editedDances, setEditedDances] = useState({});
+
+            const lineDancesCollectionPath = `artifacts/${appId}/public/data/line_dances`;
+            const queueCollectionPath = `artifacts/${appId}/public/data/queue`;
+
+            // Fetch data from Firestore
+            useEffect(() => {
+                if (!db) return;
+
+                const unsubscribeDances = db.collection(lineDancesCollectionPath).onSnapshot(snapshot => {
+                    const dances = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setLineDances(dances);
+                    setIsLoading(false);
+                }, (error) => {
+                    console.error("Error fetching line dances:", error);
+                    setIsLoading(false);
+                });
+
+                const unsubscribeQueue = db.collection(queueCollectionPath).onSnapshot(snapshot => {
+                    const queueData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    queueData.sort((a, b) => a.order - b.order);
+                    setQueue(queueData);
+                }, (error) => {
+                    console.error("Error fetching queue:", error);
+                });
+
+                return () => {
+                    unsubscribeDances();
+                    unsubscribeQueue();
+                };
+            }, []);
+
+            // Handle form submission for adding or editing a dance
+            const handleSaveDance = async (e, danceData) => {
+                e.preventDefault();
+                if (!db || !danceData.danceName) return;
+
+                try {
+                    if (editingDance) {
+                        await db.collection(lineDancesCollectionPath).doc(editingDance.id).update(danceData);
+                    } else {
+                        await db.collection(lineDancesCollectionPath).add(danceData);
+                    }
+                    setIsModalOpen(false);
+                    setEditingDance(null);
+                } catch (error) {
+                    console.error("Error saving dance:", error);
+                }
+            };
+            
+            // Save all bulk edits
+            const handleSaveBulkEdits = async () => {
+                if (!db || Object.keys(editedDances).length === 0) return;
+
+                const batch = db.batch();
+                Object.keys(editedDances).forEach(id => {
+                    const danceRef = db.collection(lineDancesCollectionPath).doc(id);
+                    batch.update(danceRef, editedDances[id]);
+                });
+                
+                try {
+                    await batch.commit();
+                    setEditedDances({});
+                    setBulkEditMode(false);
+                } catch (error) {
+                    console.error("Error saving bulk edits:", error);
+                }
+            };
+
+            // Handle deletion of a single dance
+            const handleDeleteDance = async (id) => {
+                if (!db) return;
+                try {
+                    await db.collection(lineDancesCollectionPath).doc(id).delete();
+                    setConfirmDelete(null);
+                } catch (error) {
+                    console.error("Error deleting dance:", error);
+                }
+            };
+            
+            // Handle bulk deletion
+            const handleBulkDelete = async () => {
+                if (!db || !confirmBulkDelete) return;
+
+                const batch = db.batch();
+                
+                if (confirmBulkDelete.type === 'selected') {
+                    selectedDances.forEach(id => {
+                        batch.delete(db.collection(lineDancesCollectionPath).doc(id));
+                    });
+                } else if (confirmBulkDelete.type === 'all') {
+                    const allDances = await db.collection(lineDancesCollectionPath).get();
+                    allDances.forEach(d => {
+                        batch.delete(d.ref);
+                    });
+                }
+                
+                try {
+                    await batch.commit();
+                    setSelectedDances(new Set());
+                    setConfirmBulkDelete(null);
+                } catch (error) {
+                    console.error("Error performing bulk delete:", error);
+                }
+            };
+
+            // Handle bulk import from TSV data
+            const handleBulkImport = async () => {
+                if (!db || !importText) return;
+                setImporting(true);
+
+                const lines = importText.split('\n').filter(line => line.trim() !== '');
+                if (lines.length <= 1) {
+                    setImporting(false);
+                    return;
+                }
+
+                const headers = lines[0].split('\t').map(h => h.trim());
+                const dataRows = lines.slice(1);
+                const batch = db.batch();
+
+                const headerMap = {
+                    'Dance': 'danceName',
+                    'Level': 'difficulty',
+                    'Song': 'songTitle',
+                    'URL': 'stepSheetLink',
+                };
+
+                dataRows.forEach((row) => {
+                    const values = row.split('\t').map(v => v.trim());
+                    const newDance = { isBeginnerFriendly: false };
+
+                    headers.forEach((header, i) => {
+                        const key = headerMap[header];
+                        if (key && values[i]) {
+                            newDance[key] = values[i];
+                        }
+                    });
+
+                    if (newDance.songTitle) {
+                        const match = newDance.songTitle.match(/^"(.*?)"\s*(.*)$/);
+                        if (match) {
+                            newDance.songTitle = match[1].trim();
+                            newDance.songArtist = match[2].trim();
+                        } else {
+                            newDance.songArtist = '';
+                        }
+                    }
+                    
+                    if (newDance.danceName) {
+                        const newDocRef = db.collection(lineDancesCollectionPath).doc();
+                        batch.set(newDocRef, newDance);
+                    }
+                });
+
+                try {
+                    await batch.commit();
+                    setImportText('');
+                    setImportDataModalOpen(false);
+                } catch (error) {
+                    console.error("Error performing bulk import:", error);
+                } finally {
+                    setImporting(false);
+                }
+            };
+            
+            // Toggle the "Beginner Friendly" status of a dance
+            const handleToggleBeginnerFriendly = async (dance) => {
+                if (!db) return;
+                const danceRef = db.collection(lineDancesCollectionPath).doc(dance.id);
+                await danceRef.update({ isBeginnerFriendly: !dance.isBeginnerFriendly });
+            };
+
+            const handleBulkToggleBeginnerFriendly = (dance) => {
+                setEditedDances(prev => ({
+                    ...prev,
+                    [dance.id]: {
+                        ...prev[dance.id],
+                        isBeginnerFriendly: !dance.isBeginnerFriendly
+                    }
+                }));
+            };
+            
+            // Toggle checkbox for multi-select
+            const handleSelectDance = (id) => {
+                setSelectedDances(prev => {
+                    const newSelected = new Set(prev);
+                    if (newSelected.has(id)) {
+                        newSelected.delete(id);
+                    } else {
+                        newSelected.add(id);
+                    }
+                    return newSelected;
+                });
+            };
+            
+            // Select all dances
+            const handleSelectAll = () => {
+                if (selectedDances.size === displayedDances.length) {
+                    setSelectedDances(new Set());
+                } else {
+                    const allIds = new Set(displayedDances.map(d => d.id));
+                    setSelectedDances(allIds);
+                }
+            };
+            
+            const handleBulkEditChange = (id, field, value) => {
+                const dance = lineDances.find(d => d.id === id);
+                if (dance[field] !== value) {
+                     setEditedDances(prev => ({
+                        ...prev,
+                        [id]: {
+                            ...prev[id],
+                            [field]: value
+                        }
+                    }));
+                } else {
+                    // Remove from editedDances if reverted to original value
+                    setEditedDances(prev => {
+                        const newEdits = { ...prev };
+                        delete newEdits[id];
+                        return newEdits;
+                    });
+                }
+            };
+
+            // Sort and filter dances
+            const sortedAndFilteredDances = useCallback(() => {
+                let dances = [...lineDances];
+
+                if (searchTerm) {
+                    dances = dances.filter(dance => 
+                        dance.danceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        dance.songTitle?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        dance.songArtist?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        dance.difficulty?.toLowerCase().includes(searchTerm.toLowerCase())
+                    );
+                }
+                
+                if (showBeginnerFriendlyOnly) {
+                    dances = dances.filter(dance => dance.isBeginnerFriendly);
+                }
+
+                dances.sort((a, b) => {
+                    const aValue = a[sortBy.field]?.toLowerCase() || '';
+                    const bValue = b[sortBy.field]?.toLowerCase() || '';
+                    
+                    if (aValue < bValue) return sortBy.direction === 'asc' ? -1 : 1;
+                    if (aValue > bValue) return sortBy.direction === 'asc' ? 1 : -1;
+                    return 0;
+                });
+
+                return dances;
+            }, [lineDances, searchTerm, sortBy, showBeginnerFriendlyOnly]);
+            
+            const displayedDances = sortedAndFilteredDances();
+
+            const handleSortChange = (e) => {
+                const newField = e.target.value;
+                setSortBy(prev => ({
+                    field: newField,
+                    direction: prev.field === newField ? (prev.direction === 'asc' ? 'desc' : 'asc') : 'asc'
+                }));
+            };
+
+            const handleAddDanceToQueue = (dance, position) => {
+                 onAddToQueue({
+                    type: 'song',
+                    danceName: dance.danceName,
+                    songName: dance.songTitle,
+                    artist: dance.songArtist,
+                    stepSheetUrl: dance.stepSheetLink || '',
+                    isBeginnerFriendly: dance.isBeginnerFriendly || false,
+                }, position);
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+                    <style>{`
+                        .loader {
+                            border: 4px solid #f3f3f3;
+                            border-top: 4px solid #3498db;
+                            border-radius: 50%;
+                            width: 24px;
+                            height: 24px;
+                            animation: spin 1s linear infinite;
+                        }
+                        @keyframes spin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                        }
+                        .user-id-text {
+                            word-break: break-all;
+                        }
+                        .neon-pink-bg {
+                            background-color: #ff00ff;
+                        }
+                        .neon-glow {
+                            box-shadow: 0 0 5px #ff00ff, 0 0 10px #ff00ff;
+                        }
+                    `}</style>
+                    
+                    {/* Confirmation Modal for single delete */}
+                    <Modal show={confirmDelete} onClose={() => setConfirmDelete(null)} title="Confirm Deletion">
+                        <p className="text-gray-300 mb-4">Are you sure you want to delete the dance "{confirmDelete?.danceName}"? This action cannot be undone.</p>
+                        <div className="flex justify-end space-x-2">
+                            <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-white bg-gray-600 rounded-lg hover:bg-gray-700">Cancel</button>
+                            <button onClick={() => handleDeleteDance(confirmDelete.id)} className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700">Delete</button>
+                        </div>
+                    </Modal>
+                    
+                    {/* Confirmation Modal for bulk delete */}
+                    <Modal show={confirmBulkDelete} onClose={() => setConfirmBulkDelete(null)} title="Confirm Bulk Deletion">
+                        <p className="text-gray-300 mb-4">
+                            {confirmBulkDelete?.type === 'selected' 
+                                ? `Are you sure you want to delete ${selectedDances.size} selected dance(s)?`
+                                : `Are you sure you want to delete ALL (${lineDances.length}) dances?`}
+                             This action cannot be undone.
+                        </p>
+                        <div className="flex justify-end space-x-2">
+                            <button onClick={() => setConfirmBulkDelete(null)} className="px-4 py-2 text-white bg-gray-600 rounded-lg hover:bg-gray-700">Cancel</button>
+                            <button onClick={handleBulkDelete} className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700">Delete</button>
+                        </div>
+                    </Modal>
+
+                    {/* Add/Edit Modal */}
+                    <Modal show={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingDance(null); }} title={editingDance ? "Edit Line Dance" : "Add New Line Dance"}>
+                        <DanceForm danceToEdit={editingDance} onSave={handleSaveDance} onClose={() => { setIsModalOpen(false); setEditingDance(null); }}/>
+                    </Modal>
+
+                    {/* Bulk Import Modal */}
+                    <Modal show={importDataModalOpen} onClose={() => setImportDataModalOpen(false)} title="Import Data from TSV">
+                        <p className="text-gray-300 mb-4">Paste your tab-separated data here. The first row should contain the headers: "Dance", "Level", "Song", "URL".</p>
+                        <textarea 
+                            value={importText} 
+                            onChange={(e) => setImportText(e.target.value)} 
+                            placeholder="Dance&#9;Level&#9;Song&#9;URL" 
+                            className="w-full h-48 p-2 rounded-md bg-gray-700 text-white border-gray-600 focus:outline-none focus:ring focus:ring-cyan-400 focus:ring-opacity-50"
+                        ></textarea>
+                        <div className="flex justify-end mt-4">
+                            <button onClick={handleBulkImport} disabled={importing} className="px-4 py-2 text-gray-900 bg-cyan-500 rounded-lg hover:bg-cyan-600 disabled:opacity-50 flex items-center gap-2">
+                                {importing && <div className="loader"></div>}
+                                Import Data
+                            </button>
+                        </div>
+                    </Modal>
+
+                    {/* Main UI */}
+                    <header className="flex justify-between items-center mb-6 pb-4 border-b-2 border-purple-400">
+                        <h1 className="text-3xl font-bold text-purple-400">Line Dance Management</h1>
+                        <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Back to Console</button>
+                    </header>
+
+                    <div className="flex flex-col sm:flex-row flex-wrap justify-between items-center mb-6 gap-2">
+                        <input 
+                            type="text" 
+                            placeholder="Search dances..." 
+                            value={searchTerm} 
+                            onChange={(e) => setSearchTerm(e.target.value)} 
+                            className="w-full sm:w-1/3 p-3 rounded-md bg-gray-700 text-white border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400 order-1" 
+                        />
+                        <div className="flex items-center space-x-2 flex-wrap order-2">
+                            <label htmlFor="sort-by" className="text-gray-400 text-sm">Sort by:</label>
+                            <select id="sort-by" value={sortBy.field} onChange={handleSortChange} className="p-2 rounded-md bg-gray-700 text-white border-gray-600">
+                                <option value="danceName">Dance Name</option>
+                                <option value="songTitle">Song Title</option>
+                                <option value="songArtist">Song Artist</option>
+                                <option value="difficulty">Difficulty</option>
+                            </select>
+                            <button onClick={() => setSortBy(prev => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))} className="p-2 text-white bg-gray-600 rounded-lg hover:bg-gray-700">
+                                {sortBy.direction === 'asc' ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                    </svg>
+                                )}
+                            </button>
+                            <button onClick={() => setShowBeginnerFriendlyOnly(prev => !prev)} 
+                                    className={`p-2 rounded-full transition-colors font-bold w-10 h-10 flex items-center justify-center 
+                                        ${showBeginnerFriendlyOnly ? 'neon-pink-bg text-white neon-glow' : 'bg-gray-700 text-gray-400 border-2 border-gray-600'}`}
+                                    title="Filter by Beginner Friendly">
+                                B
+                            </button>
+                            <button onClick={() => setViewMode(viewMode === 'table' ? 'card' : 'table')} className="p-2 text-white bg-gray-600 rounded-lg hover:bg-gray-700">
+                                {viewMode === 'table' ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M10 3a1 1 0 00-1 1v2a1 1 0 002 0V4a1 1 0 00-1-1z" />
+                                        <path fillRule="evenodd" d="M4 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1H4zm1 2h10v2H5V5zm0 4h10v2H5V9zm0 4h10v2H5v-2z" clipRule="evenodd" />
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM13 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2h-2zM13 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2h-2z" />
+                                    </svg>
+                                )}
+                            </button>
+                            <button onClick={() => setImportDataModalOpen(true)} className="px-4 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700">
+                                Import TSV
+                            </button>
+                            <button onClick={() => setIsModalOpen(true)} className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                                Add New Dance
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mb-4">
+                        <button onClick={() => setBulkEditMode(prev => !prev)} className={`px-4 py-2 font-bold rounded-lg transition-colors ${bulkEditMode ? 'bg-cyan-500 text-gray-900 hover:bg-cyan-600' : 'bg-gray-600 text-white hover:bg-gray-700'}`}>
+                            {bulkEditMode ? 'Exit Bulk Edit' : 'Toggle Bulk Edit Mode'}
+                        </button>
+                        {bulkEditMode && (
+                            <>
+                                <button onClick={handleSaveBulkEdits} disabled={Object.keys(editedDances).length === 0} className="px-4 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50">
+                                    Save Changes ({Object.keys(editedDances).length})
+                                </button>
+                                <button onClick={() => setConfirmBulkDelete({ type: 'selected' })} disabled={selectedDances.size === 0} className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                                    Delete Selected ({selectedDances.size})
+                                </button>
+                                <button onClick={() => setConfirmBulkDelete({ type: 'all' })} className="px-4 py-2 text-white bg-red-800 rounded-lg hover:bg-red-900">
+                                    Delete All
+                                </button>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="bg-gray-800 rounded-lg shadow overflow-hidden">
+                        {displayedDances.length === 0 ? (
+                            <div className="p-6 text-center text-gray-500">
+                                No line dances found. Add some or import from your TSV file!
+                            </div>
+                        ) : (
+                            viewMode === 'table' ? (
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-700 table-fixed">
+                                        <thead className="bg-gray-700">
+                                            <tr>
+                                                {bulkEditMode && (
+                                                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-[5%]">
+                                                        <input type="checkbox" onChange={handleSelectAll} checked={selectedDances.size > 0 && selectedDances.size === displayedDances.length} className="form-checkbox text-blue-500 bg-gray-700 rounded-md focus:ring-cyan-400" />
+                                                    </th>
+                                                )}
+                                                <th scope="col" className={`px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${bulkEditMode ? 'w-[20%]' : 'w-[25%]'}`}>Dance Name</th>
+                                                <th scope="col" className={`px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${bulkEditMode ? 'w-[20%]' : 'w-[25%]'}`}>Song Title</th>
+                                                <th scope="col" className={`px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${bulkEditMode ? 'w-[20%]' : 'w-[20%]'}`}>Song Artist</th>
+                                                <th scope="col" className={`px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${bulkEditMode ? 'w-[15%]' : 'w-[15%]'}`}>Difficulty</th>
+                                                <th scope="col" className={`px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${bulkEditMode ? 'w-[10%]' : 'w-[10%]'}`}>B. Friendly</th>
+                                                <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase tracking-wider w-1/4">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-gray-800 divide-y divide-gray-700">
+                                            {displayedDances.map((dance) => (
+                                                <tr key={dance.id} className={`border-l-4 border-pink-500 ${selectedDances.has(dance.id) ? 'bg-gray-700' : ''}`}>
+                                                    {bulkEditMode && (
+                                                        <td className="px-3 py-2 text-sm font-medium">
+                                                            <input type="checkbox" checked={selectedDances.has(dance.id)} onChange={() => handleSelectDance(dance.id)} className="form-checkbox text-blue-500 bg-gray-700 rounded-md focus:ring-cyan-400" />
+                                                        </td>
+                                                    )}
+                                                    <td className="px-3 py-2 text-sm font-medium text-white break-words">
+                                                        {bulkEditMode ? (
+                                                            <input type="text" value={editedDances[dance.id]?.danceName ?? dance.danceName} onChange={(e) => handleBulkEditChange(dance.id, 'danceName', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                        ) : (
+                                                            dance.danceName
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-sm text-gray-300 break-words">
+                                                        {bulkEditMode ? (
+                                                            <input type="text" value={editedDances[dance.id]?.songTitle ?? dance.songTitle} onChange={(e) => handleBulkEditChange(dance.id, 'songTitle', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                        ) : (
+                                                            dance.songTitle
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-sm text-gray-300 break-words">
+                                                        {bulkEditMode ? (
+                                                            <input type="text" value={editedDances[dance.id]?.songArtist ?? dance.songArtist} onChange={(e) => handleBulkEditChange(dance.id, 'songArtist', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                        ) : (
+                                                            dance.songArtist
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-sm text-gray-300 break-words">
+                                                        {bulkEditMode ? (
+                                                            <select value={editedDances[dance.id]?.difficulty ?? dance.difficulty} onChange={(e) => handleBulkEditChange(dance.id, 'difficulty', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1">
+                                                                <option value="Beginner">Beginner</option>
+                                                                <option value="Improver">Improver</option>
+                                                                <option value="Intermediate">Intermediate</option>
+                                                                <option value="Advanced">Advanced</option>
+                                                            </select>
+                                                        ) : (
+                                                            dance.difficulty
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2">
+                                                        {bulkEditMode ? (
+                                                            <button onClick={() => handleBulkToggleBeginnerFriendly(dance)} className={`rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors ${editedDances[dance.id]?.isBeginnerFriendly ?? dance.isBeginnerFriendly ? 'neon-pink-bg text-white hover:bg-pink-600' : 'bg-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                                                                B
+                                                            </button>
+                                                        ) : (
+                                                            <button onClick={() => handleToggleBeginnerFriendly(dance)} className={`rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors ${dance.isBeginnerFriendly ? 'bg-pink-500 text-white hover:bg-pink-600' : 'bg-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                                                                B
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right text-sm font-medium">
+                                                        <div className="flex justify-end space-x-1 items-center">
+                                                            <button onClick={() => handleAddDanceToQueue(dance, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                                                                </svg>
+                                                                Add Next
+                                                            </button>
+                                                            <button onClick={() => handleAddDanceToQueue(dance, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                                                                </svg>
+                                                                Add Last
+                                                            </button>
+                                                            {dance.stepSheetLink && (
+                                                                <a href={dance.stepSheetLink} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-500" title="View Step Sheet">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                                                        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                                                                    </svg>
+                                                                </a>
+                                                            )}
+                                                            <button onClick={() => { setEditingDance(dance); setIsModalOpen(true); }} className="text-yellow-400 hover:text-yellow-500" title="Edit">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                                                </svg>
+                                                            </button>
+                                                            <button onClick={() => setConfirmDelete(dance)} className="text-red-600 hover:text-red-700" title="Delete">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                                    {displayedDances.map((dance) => (
+                                        <div key={dance.id} className="relative bg-gray-700 rounded-lg shadow-md p-4 flex flex-col justify-between border-l-4 border-pink-500">
+                                            {bulkEditMode && (
+                                                <div className="absolute top-2 left-2">
+                                                    <input type="checkbox" checked={selectedDances.has(dance.id)} onChange={() => handleSelectDance(dance.id)} className="form-checkbox text-blue-500 bg-gray-800 rounded-md focus:ring-cyan-400" />
+                                                </div>
+                                            )}
+                                            <button 
+                                                onClick={() => bulkEditMode ? handleBulkToggleBeginnerFriendly(dance) : handleToggleBeginnerFriendly(dance)} 
+                                                className={`absolute top-2 right-2 w-8 h-8 flex items-center justify-center font-bold text-sm rounded-full transition-colors z-10 
+                                                    ${(editedDances[dance.id]?.isBeginnerFriendly ?? dance.isBeginnerFriendly) ? 'neon-pink-bg text-white neon-glow' : 'bg-gray-800 text-gray-400 border-2 border-gray-600'}`} 
+                                                title="Toggle Beginner Friendly">
+                                                B
+                                            </button>
+                                            <div>
+                                                <h3 className="text-lg font-bold text-cyan-300 mb-1">
+                                                    {bulkEditMode ? (
+                                                        <input type="text" value={editedDances[dance.id]?.danceName ?? dance.danceName} onChange={(e) => handleBulkEditChange(dance.id, 'danceName', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                    ) : (
+                                                        dance.danceName
+                                                    )}
+                                                </h3>
+                                                <p className="text-sm text-gray-300">
+                                                    {bulkEditMode ? (
+                                                        <input type="text" value={editedDances[dance.id]?.songTitle ?? dance.songTitle} onChange={(e) => handleBulkEditChange(dance.id, 'songTitle', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                    ) : (
+                                                        dance.songTitle
+                                                    )}
+                                                </p>
+                                                <p className="text-xs text-gray-400">
+                                                    {bulkEditMode ? (
+                                                        <input type="text" value={editedDances[dance.id]?.songArtist ?? dance.songArtist} onChange={(e) => handleBulkEditChange(dance.id, 'songArtist', e.target.value)} className="w-full bg-gray-600 border border-gray-500 rounded p-1" />
+                                                    ) : (
+                                                        dance.songArtist
+                                                    )}
+                                                </p>
+                                            </div>
+                                            <div className="mt-4 flex flex-wrap gap-2 items-center">
+                                                {bulkEditMode ? (
+                                                     <select value={editedDances[dance.id]?.difficulty ?? dance.difficulty} onChange={(e) => handleBulkEditChange(dance.id, 'difficulty', e.target.value)} className="text-xs font-semibold px-2 py-1 rounded-full bg-gray-600 text-white border-gray-500">
+                                                        <option value="Beginner">Beginner</option>
+                                                        <option value="Improver">Improver</option>
+                                                        <option value="Intermediate">Intermediate</option>
+                                                        <option value="Advanced">Advanced</option>
+                                                    </select>
+                                                ) : (
+                                                    <span className="text-xs font-semibold px-2 py-1 rounded-full text-white" style={{
+                                                        backgroundColor:
+                                                            dance.difficulty === 'Beginner' ? '#34d399' :
+                                                            dance.difficulty === 'Improver' ? '#60a5fa' :
+                                                            dance.difficulty === 'Intermediate' ? '#fde047' :
+                                                            dance.difficulty === 'Advanced' ? '#f87171' : '#a1a1aa'
+                                                    }}>{dance.difficulty}</span>
+                                                )}
+                                                <div className="flex-grow"></div>
+                                                <div className="flex space-x-2">
+                                                    <button onClick={() => handleAddDanceToQueue(dance, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                        Add Next
+                                                    </button>
+                                                    <button onClick={() => handleAddDanceToQueue(dance, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded flex items-center gap-1">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                        Add Last
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end mt-2 space-x-2">
+                                                {dance.stepSheetLink && (
+                                                    <a href={dance.stepSheetLink} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-500" title="View Step Sheet">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                                            <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </a>
+                                                )}
+                                                <button onClick={() => { setEditingDance(dance); setIsModalOpen(true); }} className="text-yellow-400 hover:text-yellow-500" title="Edit">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                                    </svg>
+                                                </button>
+                                                <button onClick={() => setConfirmDelete(dance)} className="text-red-600 hover:text-red-700" title="Delete">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )
+                        )}
+                    </div>
+                </div>
+            );
+        };
+        
+        // --- NEW DJ TOOL COMPONENTS ---
+
+        const LineRequestForm = ({ onAddToQueue, djName, lineDancesList }) => {
+            const [danceName, setDanceName] = useState('');
+            const [songName, setSongName] = useState('');
+            const [artist, setArtist] = useState('');
+            const [stepSheetUrl, setStepSheetUrl] = useState('');
+            const [customerName, setCustomerName] = useState(djName || '');
+            const [lineDanceSearch, setLineDanceSearch] = useState('');
+            const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+            const dropdownRef = useRef(null);
+
+            const handleLineDanceSelect = (dance) => {
+                setDanceName(dance.danceName || '');
+                setSongName(dance.songTitle || '');
+                setArtist(dance.songArtist || '');
+                setStepSheetUrl(dance.stepSheetLink || '');
+                setLineDanceSearch(dance.danceName);
+                setIsDropdownOpen(false);
+            };
+
+            const filteredLineDances = lineDanceSearch
+                ? lineDancesList.filter(dance =>
+                    (dance.danceName && dance.danceName.toLowerCase().includes(lineDanceSearch.toLowerCase())) ||
+                    (dance.songTitle && dance.songTitle.toLowerCase().includes(lineDanceSearch.toLowerCase())) ||
+                    (dance.songArtist && dance.songArtist.toLowerCase().includes(lineDanceSearch.toLowerCase()))
+                )
+                : lineDancesList;
+
+            useEffect(() => {
+                const handleClickOutside = (event) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                        setIsDropdownOpen(false);
+                    }
+                };
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => document.removeEventListener("mousedown", handleClickOutside);
+            }, []);
+
+            const handleSubmit = (position) => {
+                onAddToQueue({ danceName, songName, artist, customerName, type: 'song', stepSheetUrl }, position);
+            };
+
+            return (
+                <form onSubmit={(e) => e.preventDefault()}>
+                    <div className="mb-4 relative" ref={dropdownRef}>
+                        <label htmlFor="dance-search" className="block text-cyan-300 text-sm font-bold mb-2">Quick Select a Line Dance</label>
+                        <input id="dance-search" type="text" value={lineDanceSearch} onChange={(e) => { setLineDanceSearch(e.target.value); setIsDropdownOpen(true); }} onFocus={() => setIsDropdownOpen(true)} placeholder="Search by dance, song, or artist..." autoComplete="off" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        {isDropdownOpen && filteredLineDances.length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                {filteredLineDances.map(dance => (
+                                    <div key={dance.id} onClick={() => handleLineDanceSelect(dance)} className="px-4 py-2 text-white hover:bg-gray-700 cursor-pointer">
+                                        <p className="font-bold">{dance.danceName}</p>
+                                        <p className="text-sm text-gray-400">{dance.songTitle} - {dance.songArtist}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <p className="text-center text-gray-400 my-2">OR</p>
+                    <div className="mb-4">
+                        <label htmlFor="dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style</label>
+                        <input type="text" id="dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song Name</label>
+                        <input type="text" id="song-name" value={songName} onChange={e => setSongName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist</label>
+                        <input type="text" id="artist-name" value={artist} onChange={e => setArtist(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                        <button onClick={() => handleSubmit('next')} className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-2 rounded">Add Next</button>
+                        <button onClick={() => handleSubmit('last')} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-2 rounded">Add Last</button>
+                    </div>
+                </form>
+            );
+        };
+        
+        const PartnerRequestForm = ({ onAddToQueue, djName, initialDanceType, partnerDancesList }) => {
+            const [danceName, setDanceName] = useState(initialDanceType || '');
+            const [songName, setSongName] = useState('');
+            const [artist, setArtist] = useState('');
+            const [customerName, setCustomerName] = useState(djName || '');
+            
+            const handleSubmit = (position) => {
+                onAddToQueue({ danceName, songName, artist, customerName, type: 'song' }, position);
+            };
+
+            return (
+                <form onSubmit={(e) => e.preventDefault()}>
+                     <div className="mb-4">
+                        <label htmlFor="dance-select" className="block text-cyan-300 text-sm font-bold mb-2">Quick Select a Dance Style</label>
+                        <select id="dance-select" value={danceName} onChange={e => setDanceName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600">
+                            <option value="">-- Select a Dance --</option>
+                            {partnerDancesList.map(dance => <option key={dance.name} value={dance.name}>{dance.name}</option>)}
+                        </select>
+                    </div>
+                    <p className="text-center text-gray-400 my-2">OR</p>
+                    <div className="mb-4">
+                        <label htmlFor="dance-name" className="block text-cyan-300 text-sm font-bold mb-2">Dance Name/Style</label>
+                        <input type="text" id="dance-name" value={danceName} onChange={e => setDanceName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="song-name" className="block text-cyan-300 text-sm font-bold mb-2">Song Name</label>
+                         <div className="flex items-center gap-2">
+                           <input type="text" id="song-name" value={songName} onChange={e => setSongName(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="artist-name" className="block text-cyan-300 text-sm font-bold mb-2">Artist</label>
+                        <input type="text" id="artist-name" value={artist} onChange={e => setArtist(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                     <div className="flex gap-2 mt-4">
+                        <button onClick={() => handleSubmit('next')} className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-2 rounded">Add Next</button>
+                        <button onClick={() => handleSubmit('last')} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-2 rounded">Add Last</button>
+                    </div>
+                </form>
+            );
+        };
+        
+        const DjLineDanceLessonForm = ({ onAddToQueue, djName, lineDancesList }) => {
+            const [danceName, setDanceName] = useState('');
+            const [instructor, setInstructor] = useState(djName);
+            const [lessonTime, setLessonTime] = useState('');
+            const [stepSheetUrl, setStepSheetUrl] = useState('');
+            const [lineDanceSearch, setLineDanceSearch] = useState('');
+            const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+            const dropdownRef = useRef(null);
+
+            const handleLineDanceSelect = (dance) => {
+                setDanceName(dance.danceName || '');
+                setStepSheetUrl(dance.stepSheetLink || '');
+                setLineDanceSearch(dance.danceName);
+                setIsDropdownOpen(false);
+            };
+
+            const filteredLineDances = lineDanceSearch
+                ? lineDancesList.filter(dance =>
+                    (dance.danceName && dance.danceName.toLowerCase().includes(lineDanceSearch.toLowerCase()))
+                )
+                : lineDancesList;
+
+            const handleSubmit = (position) => {
+                onAddToQueue({ 
+                    danceName: `Lesson: ${danceName}`, 
+                    songName: `Taught by ${instructor}`, 
+                    artist: `at ${lessonTime}`, 
+                    customerName: djName,
+                    type: 'lesson',
+                    stepSheetUrl: stepSheetUrl,
+                }, position);
+            };
+
+            return (
+                <form onSubmit={(e) => e.preventDefault()}>
+                    <div className="mb-4 relative" ref={dropdownRef}>
+                         <label htmlFor="dance-search" className="block text-cyan-300 text-sm font-bold mb-2">Select a Line Dance to Teach</label>
+                        <input id="dance-search" type="text" value={lineDanceSearch} onChange={(e) => { setLineDanceSearch(e.target.value); setIsDropdownOpen(true); }} onFocus={() => setIsDropdownOpen(true)} placeholder="Search for the dance..." autoComplete="off" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        {isDropdownOpen && filteredLineDances.length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                {filteredLineDances.map(dance => (
+                                    <div key={dance.id} onClick={() => handleLineDanceSelect(dance)} className="px-4 py-2 text-white hover:bg-gray-700 cursor-pointer">
+                                        <p className="font-bold">{dance.danceName}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="instructor-name" className="block text-cyan-300 text-sm font-bold mb-2">Instructor Name</label>
+                        <input type="text" id="instructor-name" value={instructor} onChange={e => setInstructor(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                     <div className="mb-4">
+                        <label htmlFor="lesson-time" className="block text-cyan-300 text-sm font-bold mb-2">Lesson Time</label>
+                        <input type="time" id="lesson-time" value={lessonTime} onChange={e => setLessonTime(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                        <button onClick={() => handleSubmit('next')} className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-2 rounded">Add Next</button>
+                        <button onClick={() => handleSubmit('last')} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-2 rounded">Add Last</button>
+                    </div>
+                </form>
+            );
+        };
+        
+        const TimeInputModal = ({ onConfirm, eventName }) => {
+            const getInitialTime = () => {
+                if (eventName === 'Last Call') return '23:45';
+                if (eventName === 'Closing Time') return '00:00';
+                return '';
+            };
+            const [time, setTime] = useState(getInitialTime);
+
+            const handleConfirm = () => {
+                if (time) {
+                    onConfirm(time);
+                }
+            };
+
+            return (
+                <div>
+                    <p className="text-gray-300 mb-4">Set the time for "{eventName}"</p>
+                    <input 
+                        type="time" 
+                        value={time} 
+                        onChange={(e) => setTime(e.target.value)} 
+                        className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 mb-6"
+                    />
+                    <button onClick={handleConfirm} disabled={!time} className="w-full bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg disabled:opacity-50">
+                        Add to Queue
+                    </button>
+                </div>
+            );
+        };
+
+        const AnnouncementForm = ({ onAddToQueue }) => {
+            const [header, setHeader] = useState('');
+            const [details, setDetails] = useState('');
+            const [useExpiration, setUseExpiration] = useState(false);
+            const [expirationTime, setExpirationTime] = useState('');
+
+            const handleToggleExpiration = (e) => {
+                const checked = e.target.checked;
+                setUseExpiration(checked);
+                if (checked) {
+                    const now = new Date();
+                    now.setMinutes(now.getMinutes() + 30);
+                    const defaultTime = now.toTimeString().slice(0, 5); // HH:MM format
+                    setExpirationTime(defaultTime);
+                } else {
+                    setExpirationTime('');
+                }
+            };
+
+            const handleSubmit = (position) => {
+                let expirationTimestamp = null;
+                if (useExpiration && expirationTime) {
+                    const today = new Date().toISOString().split('T')[0];
+                    expirationTimestamp = new Date(`${today}T${expirationTime}`).toISOString();
+                }
+                onAddToQueue({ 
+                    danceName: header, 
+                    songName: details, 
+                    artist: 'ANNOUNCEMENT',
+                    type: 'announcement',
+                    expirationTime: expirationTimestamp
+                }, position);
+            };
+
+            return (
+                <form onSubmit={(e) => e.preventDefault()}>
+                    <div className="mb-4">
+                        <label htmlFor="announcement-header" className="block text-cyan-300 text-sm font-bold mb-2">Header</label>
+                        <input type="text" id="announcement-header" value={header} onChange={e => setHeader(e.target.value)} required placeholder="e.g., Drink Special!" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="announcement-details" className="block text-cyan-300 text-sm font-bold mb-2">Details</label>
+                        <textarea id="announcement-details" value={details} onChange={e => setDetails(e.target.value)} placeholder="e.g., $5 Fireball shots for the next hour!" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600 h-24"></textarea>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-4">
+                        <input type="checkbox" id="use-expiration-announcement" checked={useExpiration} onChange={handleToggleExpiration} className="form-checkbox text-pink-500 bg-gray-700 rounded-md focus:ring-pink-400" />
+                        <label htmlFor="use-expiration-announcement" className="text-sm font-medium text-cyan-300">Set 30-Min Expiration</label>
+                    </div>
+                    {useExpiration && (
+                        <div className="mb-4">
+                            <label htmlFor="expiration-time-announcement" className="block text-cyan-300 text-sm font-bold mb-2">Expiration Time</label>
+                            <input type="time" id="expiration-time-announcement" value={expirationTime} onChange={e => setExpirationTime(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                    )}
+                    <div className="flex gap-2 mt-4">
+                        <button onClick={() => handleSubmit('next')} className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-2 rounded">Add Next</button>
+                        <button onClick={() => handleSubmit('last')} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-2 rounded">Add Last</button>
+                    </div>
+                </form>
+            );
+        };
+
+        const ShoutOutForm = ({ onAddToQueue }) => {
+            const [name, setName] = useState('');
+            const [occasion, setOccasion] = useState('');
+            const [useExpiration, setUseExpiration] = useState(false);
+            const [expirationTime, setExpirationTime] = useState('');
+
+            const handleToggleExpiration = (e) => {
+                const checked = e.target.checked;
+                setUseExpiration(checked);
+                if (checked) {
+                    const now = new Date();
+                    now.setMinutes(now.getMinutes() + 30);
+                    const defaultTime = now.toTimeString().slice(0, 5); // HH:MM format
+                    setExpirationTime(defaultTime);
+                } else {
+                    setExpirationTime('');
+                }
+            };
+
+            const handleSubmit = (position) => {
+                let expirationTimestamp = null;
+                if (useExpiration && expirationTime) {
+                    const today = new Date().toISOString().split('T')[0];
+                    expirationTimestamp = new Date(`${today}T${expirationTime}`).toISOString();
+                }
+                onAddToQueue({ 
+                    danceName: `Shout-out for ${name}!`, 
+                    songName: `Happy ${occasion}!`, 
+                    artist: 'SHOUT-OUT',
+                    type: 'shout-out',
+                    expirationTime: expirationTimestamp
+                }, position);
+            };
+
+            return (
+                <form onSubmit={(e) => e.preventDefault()}>
+                    <div className="mb-4">
+                        <label htmlFor="shoutout-name" className="block text-cyan-300 text-sm font-bold mb-2">Name(s)</label>
+                        <input type="text" id="shoutout-name" value={name} onChange={e => setName(e.target.value)} required placeholder="e.g., Sarah" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="shoutout-occasion" className="block text-cyan-300 text-sm font-bold mb-2">Occasion</label>
+                        <input type="text" id="shoutout-occasion" value={occasion} onChange={e => setOccasion(e.target.value)} required placeholder="e.g., 21st Birthday" className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                    </div>
+                    <div className="flex items-center space-x-2 mb-4">
+                        <input type="checkbox" id="use-expiration-shoutout" checked={useExpiration} onChange={handleToggleExpiration} className="form-checkbox text-pink-500 bg-gray-700 rounded-md focus:ring-pink-400" />
+                        <label htmlFor="use-expiration-shoutout" className="text-sm font-medium text-cyan-300">Set 30-Min Expiration</label>
+                    </div>
+                    {useExpiration && (
+                        <div className="mb-4">
+                            <label htmlFor="expiration-time-shoutout" className="block text-cyan-300 text-sm font-bold mb-2">Expiration Time</label>
+                            <input type="time" id="expiration-time-shoutout" value={expirationTime} onChange={e => setExpirationTime(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline border-gray-600" />
+                        </div>
+                    )}
+                    <div className="flex gap-2 mt-4">
+                        <button onClick={() => handleSubmit('next')} className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-2 rounded">Add Next</button>
+                        <button onClick={() => handleSubmit('last')} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-2 rounded">Add Last</button>
+                    </div>
+                </form>
+            );
+        };
+        
+        const DjToolsPanel = ({ onToolClick, onDragStart }) => {
+            const buttonOrder = [
+                'Line Dance', 'Country Partner', 
+                'Line Dance Lesson', 'West Coast', 
+                'Custom Announcement', 'Birthday Shout-Out',
+                'Last Call', 'Closing Time'
+            ];
+
+            const getButtonClass = (event) => {
+                switch (event) {
+                    case 'Line Dance':
+                    case 'Line Dance Lesson':
+                        return 'bg-pink-500 hover:bg-pink-600 text-white';
+                    case 'Country Partner':
+                        return 'bg-cyan-500 hover:bg-cyan-600 text-white';
+                    case 'West Coast':
+                        return 'bg-yellow-500 hover:bg-yellow-600 text-gray-900';
+                    case 'Last Call':
+                    case 'Closing Time':
+                        return 'bg-red-800 hover:bg-red-700 text-white';
+                    case 'Custom Announcement':
+                        return 'bg-green-600 hover:bg-green-700 text-white';
+                    case 'Birthday Shout-Out':
+                         return 'bg-purple-600 hover:bg-purple-700 text-white';
+                    default:
+                        return 'bg-gray-700 hover:bg-gray-600 text-cyan-300';
+                }
+            };
+            
+            const createButton = (eventName) => (
+                <button
+                    key={eventName}
+                    draggable
+                    onDragStart={(e) => onDragStart(e, 'event', eventName)}
+                    onClick={() => onToolClick(eventName)}
+                    className={`${getButtonClass(eventName)} font-semibold p-3 rounded-lg text-center cursor-grab transition-colors`}
+                >
+                    {eventName}
+                </button>
+            );
+
+            return (
+                 <div>
+                    <h3 className="text-2xl font-semibold text-pink-400 mb-3">DJ Tools</h3>
+                    <div className="bg-gray-800 p-4 rounded-lg">
+                        <div className="grid grid-cols-2 gap-3">
+                            <button onClick={() => onToolClick('AI Announcement')} className="bg-purple-600 hover:bg-purple-700 col-span-2 text-white font-semibold p-3 rounded-lg text-center">✨ Generate Announcement</button>
+                            {buttonOrder.map(createButton)}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+
+        const App = () => {
+            // Auth State
+            const [authReady, setAuthReady] = useState(false);
+            const [user, setUser] = useState(null); // Firebase auth user object
+            const [djDetails, setDjDetails] = useState(null); // Firestore dj document
+            const [authError, setAuthError] = useState(null);
+
+            // Data State
+            const [queue, setQueue] = useState([]);
+            const [requests, setRequests] = useState([]);
+            const [djs, setDjs] = useState([]); // Full list of DJs for Admin panel
+            const [lineDances, setLineDances] = useState([]);
+            const [activeDj, setActiveDj] = useState(null);
+
+            // UI State
+            const [showLineRequestModal, setShowLineRequestModal] = useState(false);
+            const [showPartnerRequestModal, setShowPartnerRequestModal] = useState(false);
+            const [showLoginModal, setShowLoginModal] = useState(false);
+            const [showTipModal, setShowTipModal] = useState(false);
+            const [showAdminPanel, setShowAdminPanel] = useState(false);
+            const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+            const [showManageLineDances, setShowManageLineDances] = useState(false);
+            const [editingItem, setEditingItem] = useState(null);
+            const [venmoUser, setVenmoUser] = useState('');
+            const [cashappUser, setCashappUser] = useState('');
+            const [tipSaveConfirm, setTipSaveConfirm] = useState(false);
+            const [confirmState, setConfirmState] = useState({ show: false, title: '', message: '', onConfirm: () => {} });
+            const [showDjHistory, setShowDjHistory] = useState(false);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [showAllPublicQueue, setShowAllPublicQueue] = useState(false);
+            const [votedSongs, setVotedSongs] = useState(() => {
+                const saved = localStorage.getItem('votedSongs');
+                return saved ? JSON.parse(saved) : [];
+            });
+            const [djToolModal, setDjToolModal] = useState({ show: false, tool: null, title: '' });
+
+            // Auth listener
+            useEffect(() => {
+                if (!auth) return;
+                const unsubscribe = auth.onAuthStateChanged(async (user) => {
+                    if (user) {
+                        setUser(user);
+                        // Check if the user is a DJ
+                        const djDoc = await db.collection('djs').doc(user.uid).get();
+                        if (djDoc.exists) {
+                            const djData = { id: djDoc.id, ...djDoc.data() };
+                            setDjDetails(djData);
+                            setVenmoUser(djData.venmo || '');
+                            setCashappUser(djData.cashapp || '');
+                            // Set this user as the active DJ
+                            await db.collection("settings").doc("active_dj").set({ name: djData.name, uid: user.uid });
+                        } else {
+                            setDjDetails(null);
+                        }
+                    } else {
+                        // User is logged out, sign them in anonymously
+                        try {
+                            await auth.signInAnonymously();
+                        } catch (err) {
+                             console.error("Anonymous sign in failed:", err);
+                             if (err.code === 'auth/admin-restricted-operation' || err.code === 'auth/operation-not-allowed') {
+                                 setAuthError("Configuration Issue: Anonymous sign-in is not enabled for this project. Please go to your Firebase Console, navigate to Authentication -> Sign-in method, and enable the 'Anonymous' provider.");
+                             } else {
+                                 setAuthError(err.message);
+                             }
+                        }
+                    }
+                    setAuthReady(true);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('votedSongs', JSON.stringify(votedSongs));
+            }, [votedSongs]);
+
+            // Data listeners
+            useEffect(() => {
+                if (!db) return; 
+                
+                // Public data - fetch immediately
+                const unsubQueue = db.collection("queue").orderBy("order").onSnapshot(snapshot => {
+                    setQueue(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                }, console.error);
+
+                const unsubLineDances = db.collection(`artifacts/${appId}/public/data/line_dances`).orderBy("danceName").onSnapshot(snapshot => {
+                    setLineDances(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                }, console.error);
+
+                const unsubActiveDj = db.collection("settings").doc("active_dj").onSnapshot(doc => {
+                    setActiveDj(doc.exists ? doc.data() : null);
+                }, console.error);
+
+                // DJ-specific data - wait for auth
+                let unsubRequests = () => {};
+                let unsubDjs = () => {};
+                if (authReady && djDetails) {
+                    unsubRequests = db.collection("requests").orderBy("createdAt", "desc").onSnapshot(snapshot => {
+                        setRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    }, console.error);
+
+                    unsubDjs = db.collection("djs").onSnapshot(snapshot => {
+                        setDjs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    }, console.error);
+                }
+                
+                const interval = setInterval(() => {
+                    setQueue(currentQueue => {
+                        const now = new Date();
+                        const filteredQueue = currentQueue.filter(item => !item.expirationTime || new Date(item.expirationTime) > now);
+                        return filteredQueue.map(item => ({
+                            ...item,
+                            flashing: item.targetTime && new Date(item.targetTime).getTime() - now.getTime() < 5 * 60 * 1000 && new Date(item.targetTime) > now
+                        }));
+                    });
+                }, 5000);
+
+                return () => { 
+                    unsubQueue(); 
+                    unsubRequests(); 
+                    unsubDjs(); 
+                    unsubActiveDj();
+                    unsubLineDances();
+                    clearInterval(interval);
+                };
+            }, [authReady, djDetails]); // Re-run when auth state changes
+            
+            const addToQueue = async (itemData, position) => {
+                if (!db || !djDetails) return;
+                
+                setDjToolModal({ show: false, tool: null, title: '' });
+
+                const upcomingQueue = queue.filter(q => !q.played).sort((a, b) => a.order - b.order);
+                const batch = db.batch();
+
+                const newItemData = {
+                    ...itemData,
+                    played: false,
+                    likes: [],
+                    dislikes: [],
+                    createdAt: new Date(),
+                    expirationTime: itemData.expirationTime || null,
+                    targetTime: itemData.targetTime || null,
+                    customerName: itemData.customerName || djDetails.name,
+                };
+                delete newItemData.id;
+
+                if (position === 'next' && upcomingQueue.length > 0) {
+                    const newOrder = upcomingQueue[0].order + 0.5; // Insert between first and second
+                    newItemData.order = newOrder;
+                } else { // 'last' or empty queue
+                    const maxOrder = queue.reduce((max, item) => Math.max(max, item.order), -1);
+                    newItemData.order = maxOrder + 1;
+                }
+
+                const newDocRef = db.collection('queue').doc();
+                batch.set(newDocRef, newItemData);
+                
+                try {
+                    await batch.commit();
+                } catch (error) {
+                    console.error("Error adding item to queue:", error);
+                }
+            };
+
+            const handleAddRequestToQueue = async (request, position) => {
+                if (!db) return;
+                const itemData = {
+                    type: 'song',
+                    danceName: request.danceName,
+                    songName: request.songName,
+                    artist: request.artist,
+                    spotifyLink: request.spotifyLink || '',
+                    stepSheetUrl: request.stepSheetUrl || '',
+                };
+                await addToQueue(itemData, position);
+                await db.collection('requests').doc(request.id).delete();
+            };
+
+            const handleTimeEventConfirm = (time, eventName) => {
+                const today = new Date().toISOString().split('T')[0];
+                const targetTime = new Date(`${today}T${time}`);
+                
+                const eventData = {
+                    danceName: eventName,
+                    artist: `at ${time}`,
+                    targetTime: targetTime.toISOString(),
+                    type: 'event'
+                };
+                addToQueue(eventData, 'last');
+            };
+
+            const handleDeleteRequest = async (id) => { if (!db) return; await db.collection('requests').doc(id).delete(); };
+            
+            const handleToolClick = (toolName) => {
+                 const timeBasedTools = ['Last Call', 'Closing Time'];
+                 if (timeBasedTools.includes(toolName)) {
+                     setDjToolModal({ show: true, tool: 'timeInput', title: `Set Time: ${toolName}`, eventName: toolName });
+                 } else if (toolName === 'AI Announcement') {
+                     setDjToolModal({ show: true, tool: 'AI Announcement', title: '✨ AI Announcement Generator' });
+                 }
+                 else {
+                     setDjToolModal({ show: true, tool: toolName, title: `DJ Request: ${toolName}` });
+                 }
+            };
+
+            const handleSaveTippingInfo = async (e) => {
+                e.preventDefault();
+                if (!db || !djDetails) return;
+                const djRef = db.collection("djs").doc(djDetails.id);
+                await djRef.update({ venmo: venmoUser, cashapp: cashappUser });
+                setTipSaveConfirm(true);
+                setTimeout(() => setTipSaveConfirm(false), 2000);
+            };
+
+            const handleChangePassword = async (newPassword) => {
+                if (!user) return;
+                try {
+                    await user.updatePassword(newPassword);
+                    alert("Password updated successfully!");
+                } catch (error) {
+                    console.error("Error changing password:", error);
+                    alert("Error changing password: " + error.message);
+                }
+            };
+            
+            const handleQueueReorder = useCallback(async (dragIndex, dropIndex) => {
+                if (!db) return;
+                const upcomingQueue = queue.filter(item => !item.played).sort((a,b) => a.order - b.order);
+                const newQueue = [...upcomingQueue];
+                const [draggedItem] = newQueue.splice(dragIndex, 1);
+                newQueue.splice(dropIndex, 0, draggedItem);
+                
+                const batch = db.batch();
+                newQueue.forEach((item, index) => {
+                    const newOrder = index + 1; // Re-index starting from 1
+                    if (item.order !== newOrder) {
+                        batch.update(db.collection('queue').doc(item.id), { order: newOrder });
+                    }
+                });
+                await batch.commit();
+            }, [queue]);
+
+            const handleMoveQueueItem = (index, direction) => {
+                const upcomingQueue = queue.filter(item => !item.played).sort((a,b) => a.order - b.order);
+                if (direction === 'up' && index > 0) handleQueueReorder(index, index - 1);
+                else if (direction === 'down' && index < upcomingQueue.length - 1) handleQueueReorder(index, index + 1);
+            };
+            
+            const handleSaveEditedItem = async (updatedItem) => {
+                if (!db) return;
+                const { id, ...data } = updatedItem;
+                await db.collection('queue').doc(id).update(data);
+                setEditingItem(null);
+            };
+
+            const handleMarkAsPlayed = async (id) => {
+                if (!db) return;
+                await db.collection('queue').doc(id).update({ played: true });
+            };
+
+            const handleDeleteQueueItem = (id) => {
+                setConfirmState({
+                    show: true,
+                    title: 'Delete Item',
+                    message: 'Are you sure you want to permanently delete this item from the queue?',
+                    onConfirm: async () => {
+                        if (!db) return;
+                        await db.collection('queue').doc(id).delete();
+                        setConfirmState({ show: false, title: '', message: '', onConfirm: () => {} });
+                    }
+                });
+            };
+
+            const handleClearQueue = () => {
+                setConfirmState({
+                    show: true,
+                    title: 'Clear Entire Upcoming Queue',
+                    message: 'Are you sure you want to delete all upcoming items? This cannot be undone.',
+                    onConfirm: async () => {
+                        if (!db) return;
+                        const batch = db.batch();
+                        const upcomingItems = await db.collection('queue').where('played', '==', false).get();
+                        upcomingItems.forEach(doc => batch.delete(doc.ref));
+                        await batch.commit();
+                        setConfirmState({ show: false, title: '', message: '', onConfirm: () => {} });
+                    }
+                });
+            };
+
+            const handleClearHistory = () => {
+                setConfirmState({
+                    show: true,
+                    title: 'Clear Entire Played History',
+                    message: 'Are you sure you want to delete all played items from the history? This cannot be undone.',
+                    onConfirm: async () => {
+                        if (!db) return;
+                        const batch = db.batch();
+                        const playedItems = await db.collection('queue').where('played', '==', true).get();
+                        playedItems.forEach(doc => batch.delete(doc.ref));
+                        await batch.commit();
+                        setConfirmState({ show: false, title: '', message: '', onConfirm: () => {} });
+                    }
+                });
+            };
+
+            const handleVote = async (songId, voteType) => {
+                if (!db || !user) return;
+                const songRef = db.collection('queue').doc(songId);
+                const batch = db.batch();
+                const currentVote = votedSongs.find(v => v.id === songId)?.vote;
+
+                // Remove previous vote if it exists
+                if (currentVote) {
+                    const fieldToRemove = currentVote === 'like' ? 'likes' : 'dislikes';
+                    batch.update(songRef, { [fieldToRemove]: firebase.firestore.FieldValue.arrayRemove(user.uid) });
+                }
+
+                // Add new vote if it's different from the old one
+                if (currentVote !== voteType) {
+                    const fieldToAdd = voteType === 'like' ? 'likes' : 'dislikes';
+                    batch.update(songRef, { [fieldToAdd]: firebase.firestore.FieldValue.arrayUnion(user.uid) });
+                    setVotedSongs(votedSongs.filter(v => v.id !== songId).concat({ id: songId, vote: voteType }));
+                } else {
+                    // If clicking the same vote again, just remove it
+                    setVotedSongs(votedSongs.filter(v => v.id !== songId));
+                }
+
+                await batch.commit();
+            };
+
+            const handleLogout = async () => {
+                if (db && activeDj && user && activeDj.uid === user.uid) {
+                    await db.collection("settings").doc("active_dj").delete();
+                }
+                await auth.signOut();
+                setDjDetails(null); // This will trigger re-render to public view
+            };
+
+            const handleDragStart = (e, type, payload) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ type, payload }));
+            };
+
+            const handleDropOnQueue = async (e) => {
+                e.preventDefault();
+                const data = JSON.parse(e.dataTransfer.getData('application/json'));
+                if (data.type === 'request') {
+                    await handleAddRequestToQueue(data.payload, 'last');
+                } else if (data.type === 'event') {
+                    handleToolClick(data.payload)
+                }
+            };
+
+            const handleAddToLineDances = async (request) => {
+                if (!db || !request.danceName) return;
+                const collectionPath = `artifacts/${appId}/public/data/line_dances`;
+                await db.collection(collectionPath).add({
+                    danceName: request.danceName,
+                    songTitle: request.songName,
+                    songArtist: request.artist,
+                    stepSheetLink: request.stepSheetUrl || ''
+                });
+            };
+
+            const upcomingQueueSorted = queue.filter(item => !item.played).sort((a, b) => a.order - b.order);
+            const recentlyPlayedQueue = queue.filter(item => item.played).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            const publicQueueToShow = showAllPublicQueue ? upcomingQueueSorted : upcomingQueueSorted.slice(0, 5);
+
+            const filteredRequests = requests.filter(req => 
+                (req.songName && req.songName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (req.artist && req.artist.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (req.danceName && req.danceName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (req.customerName && req.customerName.toLowerCase().includes(searchTerm.toLowerCase()))
+            );
+            
+            const currentDjDetailsOnAir = activeDj?.uid ? djs.find(dj => dj.id === activeDj.uid) : null;
+            
+            const renderDjToolModal = () => {
+                if (!djToolModal.show) return null;
+                
+                const { tool, title, eventName } = djToolModal;
+
+                let content;
+                switch (tool) {
+                    case 'Line Dance':
+                        content = <LineRequestForm onAddToQueue={addToQueue} djName={djDetails?.name} lineDancesList={lineDances} />;
+                        break;
+                    case 'Line Dance Lesson':
+                        content = <DjLineDanceLessonForm onAddToQueue={addToQueue} djName={djDetails?.name} lineDancesList={lineDances} />;
+                        break;
+                    case 'Country Partner':
+                        content = <PartnerRequestForm onAddToQueue={addToQueue} djName={djDetails?.name} partnerDancesList={partnerDancesList} />;
+                        break;
+                    case 'West Coast':
+                        content = <PartnerRequestForm onAddToQueue={addToQueue} djName={djDetails?.name} initialDanceType="West Coast Swing" partnerDancesList={partnerDancesList} />;
+                        break;
+                    case 'timeInput':
+                        content = <TimeInputModal onConfirm={(time) => handleTimeEventConfirm(time, eventName)} eventName={eventName} />;
+                        break;
+                    case 'Custom Announcement':
+                        content = <AnnouncementForm onAddToQueue={addToQueue} />;
+                        break;
+                    case 'Birthday Shout-Out':
+                        content = <ShoutOutForm onAddToQueue={addToQueue} />;
+                        break;
+                    case 'AI Announcement':
+                        return <GeminiAnnouncementModal show={true} onClose={() => setDjToolModal({ show: false, tool: null })} />;
+                    default:
+                        content = null;
+                }
+                
+                return (
+                    <Modal show={true} onClose={() => setDjToolModal({ show: false, tool: null })} title={title}>
+                        {content}
+                    </Modal>
+                );
+            };
+
+            if (authError) {
+                return (
+                    <div className="bg-gray-900 text-white min-h-screen flex flex-col justify-center items-center p-8 text-center">
+                        <h1 className="text-3xl text-red-500 mb-4">Authentication Error</h1>
+                        <p className="max-w-md text-gray-300">{authError}</p>
+                    </div>
+                )
+            }
+
+            if (!authReady) { // Let the static loader handle the initial state
+                return null;
+            }
+
+            if (djDetails) {
+                if (showAdminPanel) {
+                    return <AdminPanel djs={djs} onClose={() => setShowAdminPanel(false)} />;
+                }
+                 if (showManageLineDances) {
+                    return <LineDanceManagement onClose={() => setShowManageLineDances(false)} onAddToQueue={addToQueue} />;
+                }
+                return (
+                    <div className="bg-gray-900 text-white min-h-screen p-4 md:p-8">
+                        {editingItem && <EditQueueItemModal item={editingItem} onSave={handleSaveEditedItem} onClose={() => setEditingItem(null)} />}
+                        <ConfirmModal {...confirmState} onClose={() => setConfirmState({ ...confirmState, show: false })} />
+                        {renderDjToolModal()}
+                        <ChangePasswordModal show={showChangePasswordModal} onClose={() => setShowChangePasswordModal(false)} onSave={handleChangePassword} />
+
+                        <header className="flex justify-between items-center mb-6 pb-4 border-b-2 border-cyan-400">
+                            <div className="flex items-center gap-4">
+                                <img 
+                                    src="/img/logo.png" 
+                                    alt="Logo" 
+                                    className="w-16 h-16 rounded-md"
+                                    onError={(e) => { e.target.onerror = null; e.target.outerHTML = `<div class="w-16 h-16 bg-gray-700 rounded-md flex items-center justify-center text-gray-400 font-bold text-xs">LOGO</div>` }}
+                                />
+                                <h1 className="text-3xl md:text-4xl font-bold text-cyan-400">DJ Console</h1>
+                                <h2 className="text-2xl text-white font-semibold">{djDetails.name}</h2>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <button onClick={() => setShowManageLineDances(true)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">Manage Line Dances</button>
+                                {djDetails.role === 'admin' && (
+                                    <button onClick={() => setShowAdminPanel(true)} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">Admin Panel</button>
+                                )}
+                                <button onClick={() => setShowChangePasswordModal(true)} className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg">Change Password</button>
+                                <button onClick={handleLogout} className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg">Logout</button>
+                            </div>
+                        </header>
+                        <div className="flex flex-col lg:flex-row gap-8">
+                            <div className="lg:w-1/2 flex flex-col gap-6">
+                                
+                                <DjToolsPanel onToolClick={handleToolClick} onDragStart={handleDragStart} />
+
+                                <div>
+                                    <h3 className="text-2xl font-semibold text-pink-400 mb-3">Submitted Requests ({filteredRequests.length})</h3>
+                                    <input 
+                                        type="text"
+                                        placeholder="Search by song, artist, dance, or name..."
+                                        value={searchTerm}
+                                        onChange={e => setSearchTerm(e.target.value)}
+                                        className="w-full p-2 mb-3 bg-gray-700 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                                    />
+                                    <div className="bg-gray-800 p-4 rounded-lg max-h-96 overflow-y-auto space-y-3">
+                                        {filteredRequests.length > 0 ? filteredRequests.map(req => {
+                                            const isPartnerDance = partnerDancesList.some(p => p.name.toLowerCase() === req.danceName?.toLowerCase());
+                                            const isLineDance = req.danceName && !isPartnerDance;
+                                            const borderColorClass = isPartnerDance ? 'border-teal-400' : isLineDance ? 'border-pink-500' : 'border-transparent';
+
+                                            return (
+                                                <div key={req.id} draggable onDragStart={(e) => handleDragStart(e, 'request', req)} className={`bg-gray-700 p-3 rounded-lg cursor-grab border-l-4 ${borderColorClass}`}>
+                                                    <p><span className="font-bold text-cyan-300">{req.danceName}</span> - <span className="text-gray-300">{req.songName}</span> by <span className="italic text-gray-400">{req.artist}</span></p>
+                                                    <p className="text-sm text-gray-500">From: {req.customerName}</p>
+                                                    {req.spotifyLink && <a href={req.spotifyLink} target="_blank" rel="noopener noreferrer" className="text-green-400 text-sm hover:underline">Spotify Link</a>}
+                                                    {req.stepSheetUrl && <a href={req.stepSheetUrl} target="_blank" rel="noopener noreferrer" className="text-purple-400 text-sm hover:underline ml-2">Step Sheet</a>}
+                                                    <div className="flex gap-2 mt-2">
+                                                        <button onClick={() => handleAddRequestToQueue(req, 'next')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded">Add Next</button>
+                                                        <button onClick={() => handleAddRequestToQueue(req, 'last')} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded">Add Last</button>
+                                                        <button onClick={() => handleDeleteRequest(req.id)} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded">Delete</button>
+                                                        {isLineDance && (
+                                                            <button onClick={() => handleAddToLineDances(req)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-2 rounded text-xs" title="Add to managed line dances">+</button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )
+                                        }) : <p className="text-gray-400">No matching requests.</p>}
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-semibold text-pink-400 mb-3">Tipping Links</h3>
+                                    <form onSubmit={handleSaveTippingInfo} className="bg-gray-800 p-4 rounded-lg space-y-3">
+                                        <input type="text" value={venmoUser} onChange={e => setVenmoUser(e.target.value)} placeholder="Venmo Username" className="w-full p-2 bg-gray-700 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+                                        <input type="text" value={cashappUser} onChange={e => setCashappUser(e.target.value)} placeholder="Cash App $Cashtag" className="w-full p-2 bg-gray-700 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+                                        <div className="flex items-center gap-4">
+                                            <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold py-2 px-4 rounded-lg">Save Tips</button>
+                                            {tipSaveConfirm && <span className="text-green-400 text-2xl">✔️</span>}
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            <div className="lg:w-1/2">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h3 className="text-2xl font-semibold text-pink-400">{showDjHistory ? 'Played History' : "Tonight's Dance Queue"}</h3>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => setShowDjHistory(!showDjHistory)} className="bg-gray-700 hover:bg-gray-600 text-cyan-300 font-semibold py-1 px-3 rounded-lg text-sm">
+                                            {showDjHistory ? 'View Queue' : 'View History'}
+                                        </button>
+                                        <button onClick={showDjHistory ? handleClearHistory : handleClearQueue} className="bg-red-800 hover:bg-red-700 text-white font-semibold py-1 px-3 rounded-lg text-sm">
+                                            {showDjHistory ? 'Clear History' : 'Clear Queue'}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="bg-gray-800 p-4 rounded-lg min-h-[50vh]">
+                                    {showDjHistory ? (
+                                        <QueueList queue={recentlyPlayedQueue} isDjView={true} title="History" />
+                                    ) : (
+                                        <QueueList queue={upcomingQueueSorted} isDjView={true} onReorder={handleQueueReorder} onEdit={setEditingItem} onDelete={handleDeleteQueueItem} onMove={handleMoveQueueItem} onMarkAsPlayed={handleMarkAsPlayed} title="Queue" isUpcomingQueue={true} onDrop={handleDropOnQueue} onDragOver={(e) => e.preventDefault()} />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="container mx-auto p-4 md:p-8">
+                    <Modal show={showLineRequestModal} onClose={() => setShowLineRequestModal(false)} title="Request a Line Dance">
+                        <RequestForm onClose={() => setShowLineRequestModal(false)} tippingInfo={currentDjDetailsOnAir} formType="line" lineDancesList={lineDances} openTippingModal={() => setShowTipModal(true)} />
+                    </Modal>
+                    <Modal show={showPartnerRequestModal} onClose={() => setShowPartnerRequestModal(false)} title="Request a Partner Dance">
+                        <RequestForm onClose={() => setShowPartnerRequestModal(false)} tippingInfo={currentDjDetailsOnAir} formType="partner" openTippingModal={() => setShowTipModal(true)} />
+                    </Modal>
+                    <Modal show={showLoginModal} onClose={() => setShowLoginModal(false)} title="DJ Login">
+                        <DJLogin onLogin={() => setShowLoginModal(false)} />
+                    </Modal>
+                    <TippingModal show={showTipModal} onClose={() => setShowTipModal(false)} tippingInfo={currentDjDetailsOnAir} />
+
+                    <header className="relative text-center mb-8">
+                         <img 
+                            src="/img/logo.png" 
+                            alt="Logo" 
+                            className="absolute top-0 left-0 h-32 md:h-48 rounded-md"
+                            onError={(e) => { e.target.onerror = null; e.target.outerHTML = `<div class="absolute top-0 left-0 w-16 h-16 md:w-20 md:h-20 bg-gray-700 rounded-md flex items-center justify-center text-gray-400 font-bold">LOGO</div>` }}
+                         />
+                         <button onClick={() => setShowLoginModal(true)} className="absolute top-0 right-0 text-gray-400 hover:text-cyan-300 transition-colors bg-gray-800/50 hover:bg-gray-700/70 font-bold py-2 px-4 rounded-lg">
+                            DJ Login
+                        </button>
+                        <div className="bg-gray-800/50 rounded-lg py-1 mb-2">
+                           <p className="text-white text-lg md:text-xl">Dancing with <a href="https://qjay.app" target="_blank" className="text-cyan-300 hover:underline">Qjay.app</a> at</p>
+                        </div>
+                        <h1 className="text-7xl md:text-8xl font-neon text-white">
+                            Neon Boots
+                        </h1>
+                        <p className="text-cyan-300 text-lg mt-2">Houston's Premier Country & Western Dance Club</p>
+                        <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-4 mt-6">
+                            <button onClick={() => setShowLineRequestModal(true)} className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-1 px-4 rounded-lg transition-colors">
+                                Request Line Dance
+                            </button>
+                            <button onClick={() => setShowPartnerRequestModal(true)} className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-1 px-4 rounded-lg transition-colors">
+                                Request Partner Dance
+                            </button>
+                             {currentDjDetailsOnAir && (currentDjDetailsOnAir.venmo || currentDjDetailsOnAir.cashapp) && (
+                                <button onClick={() => setShowTipModal(true)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-4 rounded-lg transition-colors">
+                                    Tip the DJ
+                                </button>
+                            )}
+                            <a href="https://www.neonbootsclub.com/" target="_blank" rel="noopener noreferrer" className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-1 px-4 rounded-lg transition-colors">
+                                Visit Website
+                            </a>
+                        </div>
+                    </header>
+                    <main>
+                        <div className="flex flex-col sm:flex-row justify-center items-center sm:items-baseline gap-2 sm:gap-4 mb-4">
+                            <h2 className="text-3xl font-bold text-center text-cyan-400">Tonight's Dance Queue</h2>
+                            {activeDj?.name && <p className="text-lg text-gray-300">Your DJ is {activeDj.name}</p>}
+                        </div>
+                        <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
+                            <QueueList queue={publicQueueToShow} isDjView={false} title="Queue" isUpcomingQueue={true} onVote={handleVote} votedSongs={votedSongs} user={user} />
+                             {upcomingQueueSorted.length > 5 && (
+                                <div className="text-center mt-4">
+                                    <button onClick={() => setShowAllPublicQueue(!showAllPublicQueue)} className="text-cyan-400 hover:underline">
+                                        {showAllPublicQueue ? 'Show Less' : `Show All (${upcomingQueueSorted.length})`}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {recentlyPlayedQueue.length > 0 && (
+                            <div className="mt-12">
+                                <h2 className="text-3xl font-bold text-center text-cyan-400 mb-4">Recently Played</h2>
+                                <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
+                                    <QueueList queue={recentlyPlayedQueue} isDjView={false} title="Recently Played" onVote={handleVote} votedSongs={votedSongs} user={user} />
+                                </div>
+                            </div>
+                        )}
+                        <TippingSection tippingInfo={currentDjDetailsOnAir} openTippingModal={() => setShowTipModal(true)}/>
+                    </main>
+                    <footer className="text-center mt-8 pt-4 border-t border-gray-700">
+                        <p className="text-gray-500">&copy; 2025 W. Justin Butterfras. All Rights Reserved.</p>
+                    </footer>
+                </div>
+            );
+        };
+
+        // Render the main App component into the 'root' div
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
 </html>
