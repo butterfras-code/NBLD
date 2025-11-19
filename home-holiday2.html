@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full"> <!-- Class will be 'dark-mode' or '' -->
+<head>
+    <meta charset="UTF--8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Boots Line Dance Schedule - Neon Boots</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Include Lucide icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <!-- Font Awesome for social icons (Spotify, YouTube) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Google Fonts: Teko for headers, Inter for body -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Teko:wght@400;600&display=swap" rel="stylesheet">
+    
+    <script>
+        // --- THEME MANAGEMENT SCRIPT ---
+        // (Runs immediately to prevent flash)
+        const THEME_KEY = 'neon-boots-theme';
+        const lightTheme = 'light';
+        const darkTheme = 'dark';
+
+
+        function getInitialTheme() {
+            const storedTheme = localStorage.getItem(THEME_KEY);
+            if (storedTheme) {
+                return storedTheme;
+            }
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                return darkTheme;
+            }
+            return lightTheme; // Default to light
+        }
+
+
+        const initialTheme = getInitialTheme();
+        document.documentElement.className = initialTheme === darkTheme ? 'dark-mode' : '';
+        // Refactor #6: Only write to localStorage if the theme isn't already set
+        if (localStorage.getItem(THEME_KEY) !== initialTheme) {
+            localStorage.setItem(THEME_KEY, initialTheme);
+        }
+        // --- END THEME MANAGEMENT ---
+    </script>
+    
+    <script>
+        // Tailwind config (no theme colors here, all in <style>)
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        heading: ['Teko', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Reusable glass-card like LDE-21 */
+        .glass-card {
+            background: var(--bg-card);
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(0,0,0,0.06);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        }
+        /* --- THEME VARIABLES --- */
+        :root {
+            /* Light Theme (Autumn) */
+            --bg-html: #fdf6ec;
+            --bg-body-image: url('https://www.transparenttextures.com/patterns/wood-pattern.png');
+            --text-primary: #5A3825; --text-secondary: rgba(90, 56, 37, 0.8);
+            --text-header: #C85A17; --text-accent: #C85A17; --text-highlight: #C85A17;
+            --text-inverted: #FFD966; --text-link: #C85A17;
+            --text-on-gold: #5A3825; /* ADDED: For lesson time pill */
+            --bg-sticky: rgba(253, 246, 236, 0.9); --bg-card: rgba(255, 255, 255, 0.95);
+            --bg-card-header: #5A3825; --bg-input: #ffffff;
+            --bg-toggle-hover: rgba(90, 56, 37, 0.1); --border-color: #FFD966;
+            --border-color-light: rgba(255, 217, 102, 0.5); --border-input: rgba(90, 56, 37, 0.2);
+            --border-accent: #C85A17; --highlight-border: #C85A17;
+            --highlight-shadow: rgba(200, 90, 23, 0.5); --glow-shadow: rgba(255, 170, 0, 0.3);
+        }
+        html.dark-mode {
+            /* Dark Theme (Rodeo) */
+            --bg-html: #1a0f05;
+            --bg-body-image: url('https://www.transparenttextures.com/patterns/dark-wood.png');
+            --text-primary: #e5e7eb; --text-secondary: #9ca3af;
+            --text-header: #FFD966; --text-accent: #C85A17; --text-highlight: #FFD966;
+            --text-inverted: #FFD966; /* This is correct for the header */
+            --text-link: #C85A17;
+            --bg-sticky: rgba(42, 26, 14, 0.8); --bg-card: linear-gradient(to br, #3a2a1e, #2a1a0e);
+            --bg-card-header: rgba(0, 0, 0, 0.2); /* REVERTED: Back to original dark */
+            --bg-input: #1a0f05;
+            --bg-toggle-hover: rgba(255, 217, 102, 0.1); --border-color: #FFD966;
+            --border-color-light: rgba(255, 217, 102, 0.2); --border-input: rgba(255, 217, 102, 0.2);
+            --border-accent: #C85A17; --highlight-border: #FFD966;
+            --highlight-shadow: rgba(255, 217, 102, 0.5); --glow-shadow: rgba(255, 217, 102, 0.3);
+        }
+        /* --- END THEME VARIABLES --- */
+
+
+        /* Base body styling */
+        body {
+            background-image: var(--bg-body-image);
+            background-repeat: repeat;
+            background-size: 400px;
+            background-color: var(--bg-html); /* Fallback */
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+
+        /* Re-usable styles */
+        .glow-hover:hover {
+            /* Refactor #9: Add scale and use variable */
+            transform: translateY(-2px) rotate(1deg) scale(1.01);
+            box-shadow: 0 0 25px var(--glow-shadow);
+        }
+       
+        .hidden-by-search { display: none !important; }
+
+
+        .highlight-upcoming {
+            border-width: 3px;
+            border-color: var(--highlight-border);
+            box-shadow: 0 0 20px var(--highlight-shadow);
+        }
+        
+        /* Refactor #4: Smooth max-height/opacity transitions */
+        .month-content {
+            transition: max-height 0.5s ease-out, opacity 0.3s ease-out, visibility 0.5s linear;
+            overflow: hidden;
+            max-height: 10000px; /* Large value */
+            opacity: 1;
+            visibility: visible;
+        }
+        .month-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+            visibility: hidden;
+        }
+
+
+        /* --- SEARCH STYLES --- */
+        .searching-active .month-header-button { display: none; }
+        .searching-active .month-content { display: contents; }
+        .searching-active {
+            display: grid;
+            grid-template-columns: repeat(1, minmax(0, 1fr)); gap: 2rem;
+        }
+        @media (min-width: 768px) { .searching-active { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (min-width: 1280px) { .searching-active { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    </style>
+    <style>
+        /* Announcement styles */
+        .announcement-item .announcement-heading { font-size: 1.35rem; font-weight: 800; color: var(--text-primary); }
+        .announcement-item .announcement-subheading { font-size: 0.75rem; font-weight: 700; color: var(--text-accent); }
+        .announcement-item .announcement-body { color: var(--text-secondary); }
+        .announcement-item .announcement-link { color: var(--text-link); }
+        .announcement-item .announcement-time { display: inline-block; }
+    </style>
+    <style>
+        /* Small button hover styles for music icons */
+        .lesson-spotify-link:hover {
+            background-color: rgba(29, 185, 84, 0.06);
+            border-color: rgba(29, 185, 84, 0.12);
+        }
+        .lesson-youtube-link:hover {
+            background-color: rgba(255, 0, 0, 0.06);
+            border-color: rgba(255, 0, 0, 0.12);
+        }
+        .lesson-stepsheet-wrapper .lesson-request-qjay-link,
+        .lesson-request-qjay-link {
+            transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        }
+        .lesson-request-qjay-link:hover,
+        .lesson-stepsheet-wrapper .lesson-request-qjay-link:hover {
+            background-color: rgba(255, 255, 255, 0.04);
+            color: var(--text-link);
+            border-color: var(--border-input);
+        }
+        /* Stepsheet inner link (groups) */
+        .lesson-stepsheet-wrapper .lesson-stepsheet-link {
+            display: flex; align-items: center; justify-content: center; gap: 0.75rem;
+            background: transparent; padding: 0.25rem 0.5rem; border-radius: 8px;
+        }
+        .lesson-stepsheet-wrapper .lesson-stepsheet-link img { width: 20px; height: 20px; }
+        .lesson-stepsheet-wrapper .lesson-stepsheet-link .demo-label,
+        .lesson-stepsheet-wrapper .lesson-stepsheet-link .step-label {
+            color: var(--text-secondary); font-weight: 800; font-size: 8px; line-height: 1; text-transform: uppercase;
+        }
+        .lesson-request-qjay-link { min-width: 48px; }
+        /* New shared button layout for all music/utility buttons */
+        .music-button { display: inline-flex; align-items: center; justify-content: center; gap: .25rem; height: 2.25rem; min-height: 2.25rem; width: 100%; padding: 0 .5rem; box-sizing: border-box; border-radius: .5rem; overflow: hidden; }
+        .music-button > i, .music-button > img, .music-button > span { line-height: 1; }
+        .music-button .qjay-label { font-size: 0.45rem; line-height: 1; }
+        .music-button .qjay-text { font-size: 0.7rem; line-height: 1; }
+        .lesson-qjay-box .qjay-label { font-weight: 700; opacity: 0.7; }
+        .lesson-qjay-box .qjay-label:hover { color: var(--text-highlight); opacity: 1; }
+    </style>
+</head>
+<body class="h-full p-6 lg:p-10 font-sans">
+    
+    <!-- Refactor #3: HTML Templates -->
+        <!-- Announcement rule: If a 'Dance Name' starts with '@@@' treat the row as an announcement.
+            * Heading is the Dance Name with '@@@' removed.
+            * Level becomes subheading.
+            * Song becomes the body text.
+            * Artist becomes link text and Stepsheet becomes the link URL.
+        -->
+    <template id="day-card-template">
+        <div class="day-card bg-gradient-to-br border rounded-lg shadow-xl overflow-hidden flex flex-col transform transition-all duration-300 glow-hover"
+             style="background: var(--bg-card); border-color: var(--border-color-light);">
+            
+            <div class='relative bg-[var(--bg-card-header)] text-[var(--text-inverted)] p-5 text-center'>
+                <a href="#" target="_blank" rel="noopener noreferrer" title="Add to Google Calendar"
+                   class="calendar-link absolute top-4 left-4 p-2 bg-[var(--bg-sticky)] hover:bg-[var(--bg-input)] backdrop-blur-sm rounded-full shadow transition-all transform hover:scale-110">
+                    <i data-lucide="calendar-plus" class="w-5 h-5 text-[var(--text-accent)]"></i>
+                </a>
+                <p class='day-of-week font-semibold text-base uppercase tracking-wider opacity-70'></p>
+                <p class='day-of-month text-6xl font-bold'></p>
+                <p class='month-year font-medium text-lg opacity-90'></p>
+            </div>
+            <div class='lessons-container p-6 space-y-6'>
+                <!-- Lesson items will be injected here -->
+            </div>
+        </div>
+    </template>
+
+
+    <template id="lesson-item-template">
+        <div class='relative lesson-item'>
+            <span class='lesson-time absolute top-0 right-0 bg-[var(--border-color)] text-[var(--text-on-gold)] text-xs font-bold px-3 py-1 rounded-full shadow-sm'></span>
+            <h4 class='lesson-dance text-2xl font-extrabold text-[var(--text-primary)] mt-2'></h4>
+            <p class='lesson-level text-sm font-bold text-[var(--text-accent)] uppercase tracking-wide'></p>
+            <div class='mt-2 text-sm text-[var(--text-primary)] space-y-1'>
+                <p class="lesson-song-artist"><strong>Song:</strong> <span class="lesson-song"></span> by <span class="lesson-artist"></span></p>
+                <p class="lesson-instructor-wrapper"><strong>Instructor:</strong> <span class="lesson-instructor"></span></p>
+            </div>
+            <!-- Re-styled links: Stepsheet (double width), QJay, Spotify, YouTube (compact 5-column layout) -->
+            <div class="grid grid-cols-5 gap-2 mt-3 music-links-wrapper">
+                <!-- Stepsheet box (col 1 & 2) -->
+                <div class="col-span-2 lesson-stepsheet-wrapper bg-[var(--bg-card)] hover:bg-[var(--bg-input)] h-9 px-2 rounded-lg flex items-center justify-between gap-2 border border-[var(--border-input)] transition group">
+                    <!-- Inner layout: [DEMO VIDEOS] [ICON] [STEP SHEET] (condensed) -->
+                        <a href="#" target="_blank" rel="noopener noreferrer" class="lesson-stepsheet-link music-button justify-between">
+                        <span class="demo-label text-[8px] font-semibold leading-none text-[var(--text-secondary)] group-hover:text-[var(--text-highlight)] text-right tracking-wider uppercase w-1/3">Demo<br>Videos</span>
+                        <img src="https://www.copperknob.co.uk/favicon.ico" alt="CopperKnob" class="w-4 h-4 object-contain mx-auto">
+                        <span class="step-label text-[8px] font-semibold leading-none text-[var(--text-secondary)] group-hover:text-[var(--text-highlight)] text-left tracking-wider uppercase w-1/3">Step<br>Sheet</span>
+                    </a>
+                </div>
+
+                <!-- QJay button (col 3) -> Make it same size as the other buttons with small label inside -->
+                <div class="col-span-1 flex items-center justify-center">
+                    <div class="lesson-qjay-box w-full flex items-center justify-center">
+                        <a aria-label="Request with QJay" class="lesson-request-qjay-link music-button inline-flex flex-col items-center justify-center gap-0 px-2 py-0 text-[9px] font-medium rounded-lg bg-[var(--bg-card)] border border-[var(--border-input)] text-[var(--text-secondary)] hover:bg-[var(--bg-input)] h-9 w-full" href="#" target="_blank" rel="noopener noreferrer">
+                            <span class="qjay-label text-[7px] uppercase tracking-wide leading-none">Request with</span>
+                            <span class="qjay-text text-[8px] font-medium leading-none">QJay</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Spotify (col 4) -->
+                     <a href="#" target="_blank" rel="noopener noreferrer" title="Search on Spotify"
+                         class="lesson-spotify-link music-button h-9 col-span-1 bg-[var(--bg-card)] border border-[var(--border-input)] rounded-lg text-sm text-[var(--text-secondary)] hover:text-[var(--text-link)] hover:shadow-sm transition">
+                    <i class="fab fa-spotify text-[#1DB954] text-base"></i>
+                </a>
+
+                <!-- YouTube (col 5) -->
+                     <a href="#" target="_blank" rel="noopener noreferrer" title="Search on YouTube Music"
+                         class="lesson-youtube-link music-button h-9 col-span-1 bg-[var(--bg-card)] border border-[var(--border-input)] rounded-lg text-sm text-[var(--text-secondary)] hover:text-[var(--text-link)] hover:shadow-sm transition">
+                    <i class="fab fa-youtube text-[#FF0000] text-base"></i>
+                </a>
+            </div>
+        </div>
+    </template>
+    <!-- Announcement Item Template -->
+    <template id="announcement-item-template">
+        <div class='relative announcement-item'>
+            <span class='announcement-time absolute top-0 right-0 bg-[var(--border-color)] text-[var(--text-on-gold)] text-xs font-bold px-3 py-1 rounded-full shadow-sm'></span>
+            <h4 class='announcement-heading text-2xl font-extrabold text-[var(--text-primary)] mt-2'></h4>
+            <p class='announcement-subheading text-sm font-bold text-[var(--text-accent)] uppercase tracking-wide'></p>
+            <div class='mt-2 text-sm text-[var(--text-primary)] space-y-2'>
+                <p class="announcement-body text-[var(--text-secondary)]"></p>
+                <p class="announcement-link-wrapper"><a href="#" target="_blank" rel="noopener noreferrer" class="announcement-link text-[var(--text-link)] underline font-semibold"></a></p>
+            </div>
+        </div>
+    </template>
+    <!-- End Templates -->
+    
+
+
+    <header class="relative text-center mb-8">
+        <h1 class="font-heading text-6xl font-bold text-[var(--text-header)] uppercase tracking-wider drop-shadow-lg">Line Dance Lessons</h1>
+        <p class="text-lg text-[var(--text-secondary)] mt-2">Boots, music, and a whole lot of fun.</p>
+        
+        <!-- Theme Toggle Button -->
+        <button id="theme-toggle" aria-label="Toggle theme" class="absolute top-0 right-0 p-2 rounded-full text-[var(--text-highlight)] hover:bg-[var(--bg-toggle-hover)] transition-colors">
+            <i data-lucide="moon" class="w-6 h-6 block"></i>
+            <i data-lucide="sun" class="w-6 h-6 hidden"></i>
+        </button>
+    </header>
+
+
+    <!-- qjay Link Box (styled like a card similar to LDE-21) -->
+    <div class="mb-6 glass-card p-6 rounded-2xl border-t-4 border-pink-500 text-center">
+        <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">Request with QJay</h3>
+        <p class="text-sm text-[var(--text-secondary)] mb-4">See the queue and make requests directly from your phone.</p>
+        <a href="https://qjay.app/venue/neon-boots" target="_blank" rel="noopener noreferrer"
+           class="inline-block bg-[var(--text-link)] text-black px-6 py-2 rounded-full font-bold hover:opacity-90 transition">Open QJay</a>
+    </div>
+
+
+    <!-- Search and controls -->
+    <div class="max-w-7xl mx-auto mb-6 p-4 bg-[var(--bg-sticky)] backdrop-blur-sm border border-[var(--border-color-light)] rounded-lg shadow-lg sticky top-4 z-10">
+        <div class="relative">
+            <input type="text" id="search-box" placeholder="Search by dance, artist, instructor, level..."
+                   class="w-full pl-10 pr-16 py-3 text-lg bg-[var(--bg-input)] border-2 border-[var(--border-input)] rounded-lg focus:border-[var(--text-accent)] focus:ring-[var(--text-accent)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]">
+            <div class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]">
+                <i data-lucide="search" class="w-5 h-5"></i>
+            </div>
+            <button id="clear-search" class="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-accent)] hidden">
+                Clear
+            </button>
+        </div>
+    </div>
+
+
+
+
+    <div class="max-w-7xl mx-auto">
+        <div id="data-container">
+            <p id="loading-message" class="p-6 text-[var(--text-secondary)] flex items-center justify-center text-lg">
+                <svg class="animate-spin h-6 w-6 mr-3 text-[var(--text-accent)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Loading schedule from Google Sheet...
+            </p>
+
+
+            <p id="error-message" class="hidden p-6 text-red-200 font-medium bg-red-900/50 border border-red-700 rounded-lg">
+                Oops! Could not load data. Check the script URL and deployment.
+            </p>
+
+
+            <p id="no-results-message" class="hidden p-6 text-[var(--text-secondary)] text-center text-lg">
+                No lessons found matching your search.
+            </p>
+
+
+            <div id="lessons-grid" class="hidden flex flex-col gap-8"></div>
+        </div>
+    </div>
+
+
+
+
+    <!-- Refactor #1: Split logic into functional sections -->
+    <script>
+        /**
+         * @module Utils
+         * Shared helper functions
+         */
+        const Utils = (() => {
+            // Refactor #8: Consolidate Lucide icon refresh
+            function refreshIcons() {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }
+
+
+            function convertTo24Hour(timeStr) {
+                if (!timeStr) return "19:00"; 
+                try {
+                    let [time, modifier] = timeStr.split(' ');
+                    if (!modifier) {
+                        if(timeStr.includes(':')) return timeStr;
+                        let h = parseInt(timeStr, 10);
+                        if (h < 12) h += 12;
+                        return `${h}:00`;
+                    }
+                    let [hours, minutes] = time.split(':');
+                    if (hours === '12') hours = '00';
+                    if (modifier.toUpperCase().startsWith('P')) hours = parseInt(hours, 10) + 12;
+                    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                } catch (e) {
+                    console.warn(`Could not parse time: ${timeStr}. Defaulting to 19:00.`);
+                    return "19:00";
+                }
+            }
+
+
+            function createGoogleCalendarLink(startDate, endDate, title, location) {
+                const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, '');
+                const gcalStart = formatDate(startDate);
+                const gcalEnd = formatDate(endDate);
+                const url = new URL('https://www.google.com/calendar/render');
+                url.searchParams.append('action', 'TEMPLATE');
+                url.searchParams.append('text', title);
+                url.searchParams.append('dates', `${gcalStart}/${gcalEnd}`);
+                url.searchParams.append('location', location);
+                url.searchParams.append('details', `Line dancing lesson! Details: ${window.location.href}`);
+                return url.href;
+            }
+
+
+            return {
+                refreshIcons,
+                convertTo24Hour,
+                createGoogleCalendarLink
+            };
+        })();
+
+
+        /**
+         * @module ThemeManager
+         * Handles light/dark mode toggle and persistence.
+         */
+        const ThemeManager = (() => {
+            // Refactor #7: Cache DOM queries
+            const cache = {};
+
+
+            // Constants from <head> script
+            const THEME_KEY = 'neon-boots-theme';
+            const darkTheme = 'dark';
+            const lightTheme = 'light';
+
+
+            function init() {
+                cache.themeToggle = document.getElementById('theme-toggle');
+                if (!cache.themeToggle) return;
+                
+                cache.sunIcon = cache.themeToggle.querySelector('[data-lucide="sun"]');
+                cache.moonIcon = cache.themeToggle.querySelector('[data-lucide="moon"]');
+
+
+                // Set initial icon state on load
+                if (document.documentElement.classList.contains('dark-mode')) {
+                    cache.moonIcon.classList.add('hidden');
+                    cache.sunIcon.classList.remove('hidden');
+                }
+
+
+                cache.themeToggle.addEventListener('click', _handleToggle);
+            }
+
+
+            function _handleToggle() {
+                const htmlEl = document.documentElement;
+                const isDarkMode = htmlEl.classList.toggle('dark-mode');
+                
+                cache.moonIcon.classList.toggle('hidden', isDarkMode);
+                cache.sunIcon.classList.toggle('hidden', !isDarkMode);
+
+
+                // Refactor #6: Only write to storage on change
+                localStorage.setItem(THEME_KEY, isDarkMode ? darkTheme : lightTheme);
+            }
+
+
+            return { init };
+        })();
+        
+        /**
+         * @module DataHandler
+         * Fetches, parses, and renders schedule data.
+         */
+        const DataHandler = (() => {
+            // Refactor #7: Cache DOM queries
+            const cache = {};
+            const state = {
+                groupedData: {},
+                colIndex: {}
+            };
+
+
+            const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwhf3L23W7RH9B88CdaHeA8wb9AmlQRkObGns-wJ2nZWRgMtMQBs7PEcrkluBJIoZs/exec';
+            const DANCEHALL_LOCATION = 'Neon Boots Dancehall and Saloon, 11410 Hempstead Rd, Houston, TX 77092';
+
+
+            function init() {
+                cache.lessonsGrid = document.getElementById('lessons-grid');
+                cache.loadingMessage = document.getElementById('loading-message');
+                cache.errorMessage = document.getElementById('error-message');
+                cache.dayCardTemplate = document.getElementById('day-card-template');
+                cache.lessonTemplate = document.getElementById('lesson-item-template');
+                cache.announcementTemplate = document.getElementById('announcement-item-template');
+                
+                _fetchDataAndBuildCards();
+            }
+
+
+            async function _fetchDataAndBuildCards() {
+                try {
+                    // Developer helper: append ?useSampleData=1 to the URL to use local sample data
+                    const useSampleData = new URLSearchParams(window.location.search).get('useSampleData') === '1';
+                    let data;
+                    if (useSampleData) {
+                        data = [
+                            ['Date','Lesson Time','Dance Name','Level','Song','Artist','Stepsheet','Instructor'],
+                            ['2025-11-27','7:30 PM','@@@ Closed for Thanksgiving','','We are closed for Thanksgiving.','Neon Boots','https://neonboots.example/notice',''],
+                            ['2025-11-20','7:30 PM','Bring Out the Fire','High Improver','More (RedOne Jimmy Joker Remix)','Usher','https://www.copperknob.co.uk/stepsheets/180726/bring-out-the-fire','John E']
+                        ];
+                    } else {
+                        const response = await fetch(GOOGLE_APPS_SCRIPT_URL);
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                        data = await response.json();
+                    }
+                    if (!data || data.length < 2) throw new Error('No data returned.');
+
+
+                    const headers = data[0];
+                    const dataRows = data.slice(1);
+
+
+                    state.colIndex = {
+                        date: headers.indexOf('Date'), time: headers.indexOf('Lesson Time'),
+                        danceName: headers.indexOf('Dance Name'), level: headers.indexOf('Level'),
+                        song: headers.indexOf('Song'), artist: headers.indexOf('Artist'),
+                        stepsheet: headers.indexOf('Stepsheet'), instructor: headers.indexOf('Instructor')
+                    };
+
+
+                    _groupData(dataRows);
+                    _buildMonthElements();
+                    _highlightUpcoming();
+
+
+                    // cache.loadingMessage.classList.add('hidden'); // <-- REMOVED FROM HERE
+                    cache.lessonsGrid.classList.remove('hidden');
+                    Utils.refreshIcons(); // Final icon refresh
+
+
+                } catch (error) {
+                    console.error('Error fetching data:', error);
+                    // Made this check safer
+                    if (cache.errorMessage) {
+                        cache.errorMessage.classList.remove('hidden');
+                    }
+                } finally {
+                    // ADDED: This block guarantees the loading message is hidden
+                    // after the fetch completes or errors out.
+                    if (cache.loadingMessage) {
+                        cache.loadingMessage.classList.add('hidden');
+                    }
+                }
+            }
+
+
+            function _groupData(dataRows) {
+                state.groupedData = dataRows.reduce((acc, row) => {
+                    const dateStr = row[state.colIndex.date];
+                    if (!dateStr) return acc;
+                   
+                    let dateObj;
+                    if (dateStr.includes('-')) {
+                        dateObj = new Date(dateStr + 'T00:00:00'); // Assumes YYYY-MM-DD
+                    } else {
+                        dateObj = new Date(dateStr); // Assumes MM/DD/YYYY
+                    }
+                    if (isNaN(dateObj.getTime())) return acc; 
+
+
+                    const isoDateStr = dateObj.toISOString().split('T')[0];
+                    const sortableMonthKey = isoDateStr.substring(0, 7); 
+                    const monthYearName = dateObj.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+                    const formattedDate = dateObj.toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                    const dayOfMonth = dateObj.getDate();
+                    const dayOfWeek = dateObj.toLocaleString('en-US', { weekday: 'long' }).toUpperCase();
+                    const monthName = dateObj.toLocaleString('en-US', { month: 'long' });
+
+
+                    if (!acc[sortableMonthKey]) acc[sortableMonthKey] = { monthName: monthYearName, days: {} };
+                    if (!acc[sortableMonthKey].days[isoDateStr]) acc[sortableMonthKey].days[isoDateStr] = { formattedDate, monthName, dayOfMonth, dayOfWeek, lessons: [] };
+
+
+                    acc[sortableMonthKey].days[isoDateStr].lessons.push({
+                        time: row[state.colIndex.time] || '', danceName: row[state.colIndex.danceName] || '',
+                        level: row[state.colIndex.level] || '', song: row[state.colIndex.song] || '',
+                        artist: row[state.colIndex.artist] || '', stepsheet: row[state.colIndex.stepsheet] || '',
+                        instructor: row[state.colIndex.instructor] || ''
+                    });
+                    return acc;
+                }, {});
+            }
+            
+            function _buildMonthElements() {
+                const sortedMonthKeys = Object.keys(state.groupedData).sort().reverse();
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); 
+                const currentMonthKey = today.toISOString().substring(0, 7); 
+                
+                const fragment = document.createDocumentFragment();
+
+
+                for (const monthKey of sortedMonthKeys) {
+                    const monthData = state.groupedData[monthKey];
+                    const isCurrentMonth = monthKey === currentMonthKey;
+                    const isCollapsed = !isCurrentMonth;
+
+
+                    const monthContainer = document.createElement('div');
+                    monthContainer.className = 'month-container';
+                    monthContainer.setAttribute('data-month-key', monthKey);
+                    
+                    // --- Month Header Button ---
+                    // Refactor #10 & #11: Add 🍂 and chevrons
+                    const monthButton = document.createElement('button');
+                    monthButton.className = 'month-header-button flex justify-between items-center w-full text-5xl font-heading font-bold text-[var(--text-accent)] mt-8 mb-4 border-b-2 border-[var(--border-accent)] pb-2';
+                    // Refactor #5: Accessibility
+                    monthButton.setAttribute('aria-expanded', !isCollapsed);
+                    monthButton.innerHTML = `
+                        <span class="flex items-center gap-4">
+                            <span class="inline-block text-3xl transition-transform hover:rotate-12">🍂</span>
+                            <span>${monthData.monthName}</span>
+                        </span>
+                        <span class='text-2xl font-sans text-[var(--text-highlight)]'>
+                            <i data-lucide="chevron-down" class="${isCollapsed ? 'hidden' : 'block'}"></i>
+                            <i data-lucide="chevron-right" class="${isCollapsed ? 'block' : 'hidden'}"></i>
+                        </span>
+                    `;
+                    
+                    const monthContent = document.createElement('div');
+                    monthContent.className = `month-content grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 ${isCollapsed ? 'collapsed' : ''}`;
+
+
+                    const sortedDayKeys = Object.keys(monthData.days).sort();
+                    for (const dayKey of sortedDayKeys) { 
+                        const dayData = monthData.days[dayKey];
+                        const card = _buildDayCard(dayData, dayKey);
+                        monthContent.appendChild(card);
+                    }
+                    
+                    monthButton.addEventListener('click', () => {
+                        const isNowCollapsed = monthContent.classList.toggle('collapsed');
+                        monthButton.setAttribute('aria-expanded', !isNowCollapsed);
+                        
+                        // Refactor #10: Toggle chevrons
+                        const chevronDown = monthButton.querySelector('[data-lucide="chevron-down"]');
+                        const chevronRight = monthButton.querySelector('[data-lucide="chevron-right"]');
+                        chevronDown.classList.toggle('hidden', isNowCollapsed);
+                        chevronRight.classList.toggle('hidden', !isNowCollapsed);
+                    });
+
+
+                    monthContainer.appendChild(monthButton);
+                    monthContainer.appendChild(monthContent);
+                    fragment.appendChild(monthContainer);
+                }
+                cache.lessonsGrid.appendChild(fragment);
+            }
+
+
+            function _buildDayCard(dayData, dayKey) {
+                dayData.lessons.sort((a, b) => Utils.convertTo24Hour(a.time).localeCompare(Utils.convertTo24Hour(b.time)));
+
+
+                // --- Calendar Link ---
+                const firstLessonTime = dayData.lessons.length > 0 ? dayData.lessons[0].time : '19:00';
+                const time24 = Utils.convertTo24Hour(firstLessonTime);
+                const startDateTime = new Date(`${dayKey}T${time24}:00`);
+                const durationHours = Math.max(2, dayData.lessons.length);
+                const endDateTime = new Date(startDateTime.getTime() + durationHours * 60 * 60 * 1000);
+                const gCalLink = Utils.createGoogleCalendarLink(startDateTime, endDateTime, `Line Dancing @ Neon Boots`, DANCEHALL_LOCATION);
+
+
+                // --- Card Creation ---
+                // Refactor #3: Use <template>
+                const card = cache.dayCardTemplate.content.cloneNode(true).firstElementChild;
+                card.id = `card-${dayKey}`;
+                card.querySelector('.calendar-link').href = gCalLink;
+                card.querySelector('.day-of-week').textContent = dayData.dayOfWeek;
+                card.querySelector('.day-of-month').textContent = dayData.dayOfMonth;
+                card.querySelector('.month-year').textContent = `${dayData.monthName}, ${dayData.formattedDate.split(', ')[1]}`;
+                
+                const lessonsContainer = card.querySelector('.lessons-container');
+                const searchableText = [dayData.dayOfWeek, dayData.formattedDate];
+
+
+                dayData.lessons.forEach((lesson, index) => {
+                    const lessonEl = _buildLessonItem(lesson);
+                    lessonsContainer.appendChild(lessonEl);
+                    
+                    if (index < dayData.lessons.length - 1) {
+                        const hr = document.createElement('hr');
+                        hr.className = 'my-6 border-[var(--border-color-light)]';
+                        lessonsContainer.appendChild(hr);
+                    }
+
+
+                    const danceNameRaw = lesson.danceName || '';
+                    const danceNameStripped = danceNameRaw.replace(/^@{3}\s*/, '').trim();
+                    searchableText.push(danceNameRaw, danceNameStripped, lesson.level, lesson.song, lesson.artist, lesson.instructor);
+                });
+                
+                card.setAttribute('data-search-term', searchableText.join(' ').toLowerCase());
+                return card;
+            }
+
+
+            function _buildLessonItem(lesson) {
+                // Refactor #3: Use <template>
+                // Announcements (Dance Name starts with '@@@') get special template
+                const isAnnouncement = (lesson.danceName || '').trim().startsWith('@@@');
+                if (isAnnouncement && cache.announcementTemplate) {
+                    const announce = cache.announcementTemplate.content.cloneNode(true).firstElementChild;
+                    const timeEl = announce.querySelector('.announcement-time');
+                    timeEl.textContent = lesson.time || '';
+                    if (!lesson.time || lesson.time.trim().length === 0) timeEl.classList.add('hidden');
+                    const headingText = (lesson.danceName || '').replace(/^@{3}\s*/, '').trim();
+                    announce.querySelector('.announcement-heading').textContent = headingText || 'Announcement';
+                    const subEl = announce.querySelector('.announcement-subheading');
+                    const bodyEl = announce.querySelector('.announcement-body');
+                    const linkWrap = announce.querySelector('.announcement-link-wrapper');
+                    if (lesson.level && lesson.level.trim().length > 0) {
+                        subEl.textContent = lesson.level;
+                    } else {
+                        subEl.classList.add('hidden');
+                    }
+                    if (lesson.song && lesson.song.trim().length > 0) {
+                        bodyEl.textContent = lesson.song;
+                    } else {
+                        bodyEl.classList.add('hidden');
+                    }
+                    const annLinkEl = announce.querySelector('.announcement-link');
+                    if (lesson.artist && lesson.artist.trim().length > 0) {
+                        annLinkEl.textContent = lesson.artist;
+                        if (lesson.stepsheet && lesson.stepsheet.trim().length > 0) {
+                            annLinkEl.href = lesson.stepsheet;
+                            annLinkEl.target = '_blank';
+                            annLinkEl.rel = 'noopener noreferrer';
+                        } else {
+                            // If we don't have a stepsheet URL, make the artist plain text
+                            annLinkEl.removeAttribute('href');
+                            annLinkEl.classList.remove('underline');
+                            annLinkEl.style.cursor = 'default';
+                        }
+                    } else {
+                        // No artist text => hide the entire link wrapper
+                        if (linkWrap) linkWrap.classList.add('hidden');
+                    }
+                    return announce;
+                }
+                const item = cache.lessonTemplate.content.cloneNode(true).firstElementChild;
+                
+                item.querySelector('.lesson-time').textContent = lesson.time || 'N/A';
+                item.querySelector('.lesson-dance').textContent = lesson.danceName || 'TBD';
+                item.querySelector('.lesson-level').textContent = lesson.level || 'All Levels';
+                item.querySelector('.lesson-instructor').textContent = lesson.instructor || 'TBD';
+
+
+                const songArtist = item.querySelector('.lesson-song-artist');
+                if (lesson.song && lesson.artist) {
+                    item.querySelector('.lesson-song').textContent = lesson.song;
+                    item.querySelector('.lesson-artist').textContent = lesson.artist;
+                } else {
+                    songArtist.classList.add('hidden');
+                }
+
+
+                const musicLinks = item.querySelector('.music-links-wrapper');
+                if (lesson.song && lesson.artist) {
+                    const searchQuery = encodeURIComponent(`${lesson.song} ${lesson.artist}`);
+                    item.querySelector('.lesson-youtube-link').href = `https://music.youtube.com/search?q=${searchQuery}`;
+                    item.querySelector('.lesson-spotify-link').href = `https://open.spotify.com/search/${searchQuery}`;
+                } else {
+                    musicLinks.classList.add('hidden');
+                }
+
+
+                const stepsheetWrapper = item.querySelector('.lesson-stepsheet-wrapper');
+                const stepsheetLinkEl = item.querySelector('.lesson-stepsheet-link');
+                if (lesson.stepsheet) {
+                    stepsheetLinkEl.href = lesson.stepsheet;
+                } else {
+                    // hide the stepsheet link but not necessarily the wrapper if QJay will show
+                    stepsheetLinkEl.classList.add('hidden');
+                }
+
+                // QJay link prefill: prefer danceName, optionally use song/title and artist
+                const qjayLinkEl = item.querySelector('.lesson-request-qjay-link');
+                const qjayLabelEl = item.querySelector('.qjay-label');
+                const qjayWrapperEl = item.querySelector('.lesson-qjay-box');
+                if (qjayLinkEl) {
+                    const base = 'https://qjay.app/venue/neon-boots';
+                    const params = new URLSearchParams();
+                    params.set('request_type', 'line-dance');
+                    const hasDanceName = lesson.danceName && lesson.danceName.trim().length > 0;
+                    const hasSong = lesson.song && lesson.song.trim().length > 0;
+                    const hasArtist = lesson.artist && lesson.artist.trim().length > 0;
+
+                    if (hasDanceName) {
+                        // Seed the line-dance search with the dance name
+                        params.set('search', lesson.danceName.trim());
+                        // Also include a specific danceName param which the modal will use
+                        params.set('danceName', lesson.danceName.trim());
+                    } else if (hasSong) {
+                        params.set('search', lesson.song.trim());
+                    }
+                    if (hasSong) params.set('title', lesson.song.trim());
+                    if (hasArtist) params.set('artist', lesson.artist.trim());
+
+                    // Set href to fully-qualified QJay deep-link
+                    qjayLinkEl.href = `${base}?${params.toString()}`;
+
+                    // If no identifiable info to pre-fill, hide the QJay link
+                    const hasQjayInfo = hasDanceName || hasSong || hasArtist;
+                    if (!hasQjayInfo) {
+                        qjayLinkEl.classList.add('hidden');
+                        if (qjayLabelEl) qjayLabelEl.classList.add('hidden');
+                        if (qjayWrapperEl) qjayWrapperEl.classList.add('hidden');
+                    } else {
+                        if (qjayLabelEl) qjayLabelEl.classList.remove('hidden');
+                        if (qjayWrapperEl) qjayWrapperEl.classList.remove('hidden');
+                    }
+
+                    // If neither stepsheet link nor QJay link are present, hide the wrapper entirely
+                    const hasStepsheet = !!(lesson.stepsheet && lesson.stepsheet.trim().length > 0);
+                    if (!hasStepsheet && !hasQjayInfo) {
+                        stepsheetWrapper.classList.add('hidden');
+                    }
+                }
+                
+                return item;
+            }
+
+
+            function _highlightUpcoming() {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); 
+                const sortedDayKeys = Object.keys(state.groupedData)
+                    .flatMap(monthKey => Object.keys(state.groupedData[monthKey].days))
+                    .sort();
+                
+                let nextUpcomingCardId = null;
+                for (const dayKey of sortedDayKeys) {
+                    const dayDate = new Date(dayKey + 'T00:00:00');
+                    if (dayDate >= today) {
+                        nextUpcomingCardId = `card-${dayKey}`;
+                        break;
+                    }
+                }
+
+
+                if (nextUpcomingCardId) {
+                    const nextCard = document.getElementById(nextUpcomingCardId);
+                    if (nextCard) {
+                        setTimeout(() => {
+                           nextCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                           nextCard.classList.add('highlight-upcoming');
+                        }, 100); 
+                    }
+                }
+            }
+            
+            return { init };
+        })();
+        
+        /**
+         * @module SearchManager
+         * Handles search input, clearing, and layout toggling.
+         */
+        const SearchManager = (() => {
+            // Refactor #7: Cache DOM queries
+            const cache = {};
+
+
+            function init() {
+                cache.searchBox = document.getElementById('search-box');
+                cache.clearButton = document.getElementById('clear-search');
+                cache.noResultsMessage = document.getElementById('no-results-message');
+                cache.lessonsGrid = document.getElementById('lessons-grid');
+
+
+                cache.searchBox.addEventListener('input', _handleSearch);
+                cache.clearButton.addEventListener('click', _clearSearch);
+                // Refactor #5: Add keyboard handling
+                document.addEventListener('keydown', _handleKeyDown);
+            }
+
+
+            function _handleKeyDown(e) {
+                if (e.key === 'Escape' && cache.searchBox.value.length > 0) {
+                    _clearSearch();
+                }
+            }
+
+
+            function _clearSearch() {
+                cache.searchBox.value = '';
+                _handleSearch();
+            }
+
+
+            function _handleSearch() {
+                const searchTerm = cache.searchBox.value.toLowerCase().trim();
+                cache.clearButton.classList.toggle('hidden', searchTerm.length === 0);
+                
+                let totalVisible = 0;
+                const allDayCards = document.querySelectorAll('.day-card');
+
+
+                allDayCards.forEach(card => {
+                    const searchableText = card.getAttribute('data-search-term');
+                    const isVisible = searchableText.includes(searchTerm);
+                    card.classList.toggle('hidden-by-search', !isVisible);
+                    if (isVisible) totalVisible++;
+                });
+
+
+                _toggleLayout(searchTerm.length > 0);
+                cache.noResultsMessage.classList.toggle('hidden', totalVisible > 0);
+            }
+
+
+            function _toggleLayout(isSearching) {
+                if (isSearching) {
+                    cache.lessonsGrid.classList.add('searching-active');
+                    cache.lessonsGrid.classList.remove('flex', 'flex-col', 'gap-8');
+                    
+                    document.querySelectorAll('.month-content').forEach(content => {
+                        content.classList.remove('collapsed');
+                    });
+                } else {
+                    cache.lessonsGrid.classList.remove('searching-active');
+                    cache.lessonsGrid.classList.add('flex', 'flex-col', 'gap-8');
+                   
+                    const today = new Date();
+                    const currentMonthKey = today.toISOString().substring(0, 7); 
+
+
+                    document.querySelectorAll('.month-container').forEach(container => {
+                        const monthKey = container.getAttribute('data-month-key');
+                        const isCurrentMonth = monthKey === currentMonthKey;
+                        
+                        // Restore original collapsed state
+                        if (!isCurrentMonth) {
+                             container.querySelector('.month-content').classList.add('collapsed');
+                        }
+                    });
+                }
+            }
+            
+            return { init };
+        })();
+
+
+
+
+        // --- Refactor #2: Boot Sequence ---
+        document.addEventListener('DOMContentLoaded', () => {
+            ThemeManager.init();
+            DataHandler.init(); // <-- FIX: Was DataManager
+            SearchManager.init();
+        });
+
+
+    </script>
+</body>
+</html>
+
+
+
