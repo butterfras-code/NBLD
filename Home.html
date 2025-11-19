@@ -186,8 +186,11 @@
                 </a>
             </div>
             <div class='lesson-stepsheet-wrapper mt-4'>
-                <a href='#' target='_blank' class='lesson-stepsheet-link inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-link)] hover:text-[var(--text-highlight)] transition-colors group'>
+                <a href='#' target='_blank' rel='noopener noreferrer' class='lesson-stepsheet-link inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-link)] hover:text-[var(--text-highlight)] transition-colors group'>
                     View Stepsheet →
+                </a>
+                <a href='#' target='_blank' rel='noopener noreferrer' class='lesson-request-qjay-link inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-link)] hover:text-[var(--text-highlight)] ml-4 transition-colors'>
+                    Request with QJay
                 </a>
             </div>
         </div>
@@ -625,11 +628,50 @@
                 }
 
 
-                const stepsheet = item.querySelector('.lesson-stepsheet-wrapper');
+                const stepsheetWrapper = item.querySelector('.lesson-stepsheet-wrapper');
+                const stepsheetLinkEl = item.querySelector('.lesson-stepsheet-link');
                 if (lesson.stepsheet) {
-                    item.querySelector('.lesson-stepsheet-link').href = lesson.stepsheet;
+                    stepsheetLinkEl.href = lesson.stepsheet;
                 } else {
-                    stepsheet.classList.add('hidden');
+                    // hide the stepsheet link but not necessarily the wrapper if QJay will show
+                    stepsheetLinkEl.classList.add('hidden');
+                }
+
+                // QJay link prefill: prefer danceName, optionally use song/title and artist
+                const qjayLinkEl = item.querySelector('.lesson-request-qjay-link');
+                if (qjayLinkEl) {
+                    const base = 'https://qjay.app/venue/neon-boots';
+                    const params = new URLSearchParams();
+                    params.set('request_type', 'line-dance');
+                    const hasDanceName = lesson.danceName && lesson.danceName.trim().length > 0;
+                    const hasSong = lesson.song && lesson.song.trim().length > 0;
+                    const hasArtist = lesson.artist && lesson.artist.trim().length > 0;
+
+                    if (hasDanceName) {
+                        // Seed the line-dance search with the dance name
+                        params.set('search', lesson.danceName.trim());
+                        // Also include a specific danceName param which the modal will use
+                        params.set('danceName', lesson.danceName.trim());
+                    } else if (hasSong) {
+                        params.set('search', lesson.song.trim());
+                    }
+                    if (hasSong) params.set('title', lesson.song.trim());
+                    if (hasArtist) params.set('artist', lesson.artist.trim());
+
+                    // Set href to fully-qualified QJay deep-link
+                    qjayLinkEl.href = `${base}?${params.toString()}`;
+
+                    // If no identifiable info to pre-fill, hide the QJay link
+                    const hasQjayInfo = hasDanceName || hasSong || hasArtist;
+                    if (!hasQjayInfo) {
+                        qjayLinkEl.classList.add('hidden');
+                    }
+
+                    // If neither stepsheet link nor QJay link are present, hide the wrapper entirely
+                    const hasStepsheet = !!(lesson.stepsheet && lesson.stepsheet.trim().length > 0);
+                    if (!hasStepsheet && !hasQjayInfo) {
+                        stepsheetWrapper.classList.add('hidden');
+                    }
                 }
                 
                 return item;
