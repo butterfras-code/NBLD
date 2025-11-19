@@ -153,6 +153,14 @@
         @media (min-width: 1280px) { .searching-active { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
     </style>
     <style>
+        /* Announcement styles */
+        .announcement-item .announcement-heading { font-size: 1.35rem; font-weight: 800; color: var(--text-primary); }
+        .announcement-item .announcement-subheading { font-size: 0.75rem; font-weight: 700; color: var(--text-accent); }
+        .announcement-item .announcement-body { color: var(--text-secondary); }
+        .announcement-item .announcement-link { color: var(--text-link); }
+        .announcement-item .announcement-time { display: inline-block; }
+    </style>
+    <style>
         /* Small button hover styles for music icons */
         .lesson-spotify-link:hover {
             background-color: rgba(29, 185, 84, 0.06);
@@ -195,6 +203,12 @@
 <body class="h-full p-6 lg:p-10 font-sans">
     
     <!-- Refactor #3: HTML Templates -->
+        <!-- Announcement rule: If a 'Dance Name' starts with '@@@' treat the row as an announcement.
+            * Heading is the Dance Name with '@@@' removed.
+            * Level becomes subheading.
+            * Song becomes the body text.
+            * Artist becomes link text and Stepsheet becomes the link URL.
+        -->
     <template id="day-card-template">
         <div class="day-card bg-gradient-to-br border rounded-lg shadow-xl overflow-hidden flex flex-col transform transition-all duration-300 glow-hover"
              style="background: var(--bg-card); border-color: var(--border-color-light);">
@@ -257,6 +271,18 @@
                          class="lesson-youtube-link music-button h-9 col-span-1 bg-[var(--bg-card)] border border-[var(--border-input)] rounded-lg text-sm text-[var(--text-secondary)] hover:text-[var(--text-link)] hover:shadow-sm transition">
                     <i class="fab fa-youtube text-[#FF0000] text-base"></i>
                 </a>
+            </div>
+        </div>
+    </template>
+    <!-- Announcement Item Template -->
+    <template id="announcement-item-template">
+        <div class='relative announcement-item'>
+            <span class='announcement-time absolute top-0 right-0 bg-[var(--border-color)] text-[var(--text-on-gold)] text-xs font-bold px-3 py-1 rounded-full shadow-sm'></span>
+            <h4 class='announcement-heading text-2xl font-extrabold text-[var(--text-primary)] mt-2'></h4>
+            <p class='announcement-subheading text-sm font-bold text-[var(--text-accent)] uppercase tracking-wide'></p>
+            <div class='mt-2 text-sm text-[var(--text-primary)] space-y-2'>
+                <p class="announcement-body text-[var(--text-secondary)]"></p>
+                <p class="announcement-link-wrapper"><a href="#" target="_blank" rel="noopener noreferrer" class="announcement-link text-[var(--text-link)] underline font-semibold"></a></p>
             </div>
         </div>
     </template>
@@ -461,6 +487,7 @@
                 cache.errorMessage = document.getElementById('error-message');
                 cache.dayCardTemplate = document.getElementById('day-card-template');
                 cache.lessonTemplate = document.getElementById('lesson-item-template');
+                cache.announcementTemplate = document.getElementById('announcement-item-template');
                 
                 _fetchDataAndBuildCards();
             }
@@ -468,9 +495,20 @@
 
             async function _fetchDataAndBuildCards() {
                 try {
-                    const response = await fetch(GOOGLE_APPS_SCRIPT_URL);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const data = await response.json();
+                    // Developer helper: append ?useSampleData=1 to the URL to use local sample data
+                    const useSampleData = new URLSearchParams(window.location.search).get('useSampleData') === '1';
+                    let data;
+                    if (useSampleData) {
+                        data = [
+                            ['Date','Lesson Time','Dance Name','Level','Song','Artist','Stepsheet','Instructor'],
+                            ['2025-11-27','7:30 PM','@@@ Closed for Thanksgiving','','We are closed for Thanksgiving.','Neon Boots','https://neonboots.example/notice',''],
+                            ['2025-11-20','7:30 PM','Bring Out the Fire','High Improver','More (RedOne Jimmy Joker Remix)','Usher','https://www.copperknob.co.uk/stepsheets/180726/bring-out-the-fire','John E']
+                        ];
+                    } else {
+                        const response = await fetch(GOOGLE_APPS_SCRIPT_URL);
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                        data = await response.json();
+                    }
                     if (!data || data.length < 2) throw new Error('No data returned.');
 
 
@@ -653,7 +691,9 @@
                     }
 
 
-                    searchableText.push(lesson.danceName, lesson.level, lesson.song, lesson.artist, lesson.instructor);
+                    const danceNameRaw = lesson.danceName || '';
+                    const danceNameStripped = danceNameRaw.replace(/^@{3}\s*/, '').trim();
+                    searchableText.push(danceNameRaw, danceNameStripped, lesson.level, lesson.song, lesson.artist, lesson.instructor);
                 });
                 
                 card.setAttribute('data-search-term', searchableText.join(' ').toLowerCase());
@@ -663,6 +703,47 @@
 
             function _buildLessonItem(lesson) {
                 // Refactor #3: Use <template>
+                // Announcements (Dance Name starts with '@@@') get special template
+                const isAnnouncement = (lesson.danceName || '').trim().startsWith('@@@');
+                if (isAnnouncement && cache.announcementTemplate) {
+                    const announce = cache.announcementTemplate.content.cloneNode(true).firstElementChild;
+                    const timeEl = announce.querySelector('.announcement-time');
+                    timeEl.textContent = lesson.time || '';
+                    if (!lesson.time || lesson.time.trim().length === 0) timeEl.classList.add('hidden');
+                    const headingText = (lesson.danceName || '').replace(/^@{3}\s*/, '').trim();
+                    announce.querySelector('.announcement-heading').textContent = headingText || 'Announcement';
+                    const subEl = announce.querySelector('.announcement-subheading');
+                    const bodyEl = announce.querySelector('.announcement-body');
+                    const linkWrap = announce.querySelector('.announcement-link-wrapper');
+                    if (lesson.level && lesson.level.trim().length > 0) {
+                        subEl.textContent = lesson.level;
+                    } else {
+                        subEl.classList.add('hidden');
+                    }
+                    if (lesson.song && lesson.song.trim().length > 0) {
+                        bodyEl.textContent = lesson.song;
+                    } else {
+                        bodyEl.classList.add('hidden');
+                    }
+                    const annLinkEl = announce.querySelector('.announcement-link');
+                    if (lesson.artist && lesson.artist.trim().length > 0) {
+                        annLinkEl.textContent = lesson.artist;
+                        if (lesson.stepsheet && lesson.stepsheet.trim().length > 0) {
+                            annLinkEl.href = lesson.stepsheet;
+                            annLinkEl.target = '_blank';
+                            annLinkEl.rel = 'noopener noreferrer';
+                        } else {
+                            // If we don't have a stepsheet URL, make the artist plain text
+                            annLinkEl.removeAttribute('href');
+                            annLinkEl.classList.remove('underline');
+                            annLinkEl.style.cursor = 'default';
+                        }
+                    } else {
+                        // No artist text => hide the entire link wrapper
+                        if (linkWrap) linkWrap.classList.add('hidden');
+                    }
+                    return announce;
+                }
                 const item = cache.lessonTemplate.content.cloneNode(true).firstElementChild;
                 
                 item.querySelector('.lesson-time').textContent = lesson.time || 'N/A';
