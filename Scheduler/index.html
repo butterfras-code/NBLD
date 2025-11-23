@@ -224,7 +224,7 @@
             /************************************************************
              * 1. GLOBAL IMPORTS & CHECKS
              ************************************************************/
-            const { useState, useEffect, useMemo } = React;
+            const { useState, useEffect, useMemo, useRef } = React;
 
             // Check Libraries
             if (!window.dateFns) throw new Error("date-fns not loaded.");
@@ -353,6 +353,11 @@
                 clearScheduleForMonth: (m, y) => runGAS('clearScheduleForMonth', m, y)
             };
 
+            // New batched APIs
+            StorageService.getMonthData = (m, y) => runGAS('getMonthData', m, y);
+            StorageService.batchSaveDaySchedules = (arr) => runGAS('batchSaveDaySchedules', JSON.stringify(arr));
+            StorageService.batchDeleteDaySchedules = (arr) => runGAS('batchDeleteDaySchedules', JSON.stringify(arr));
+
             /************************************************************
              * 4. COMPONENTS
              ************************************************************/
@@ -401,13 +406,38 @@
                 const [isDropdownOpen, setIsDropdownOpen] = useState(false);
                 const [showAddForm, setShowAddForm] = useState(false);
                 const [newDance, setNewDance] = useState({ stepsheetUrl: '', name: '', song: '', artist: '', difficulty: Difficulty.Beginner });
+                const inputRef = useRef(null);
+                const dropdownRef = useRef(null);
+                const [dropdownStyle, setDropdownStyle] = useState(null);
 
                 const db = Array.isArray(dancesDatabase) ? dancesDatabase : [];
+                const selectedIds = useMemo(() => new Set((selectedDances || []).map(s => s.id)), [selectedDances]);
+                const maxResults = 200; // keep it reasonable for performance
+                const term = (searchTerm || '').toLowerCase().trim();
 
-                const filteredDances = db.filter(d =>
-                    !selectedDances.find(sel => sel.id === d.id) &&
-                    (d.name.toLowerCase().includes(searchTerm.toLowerCase()) || d.artist.toLowerCase().includes(searchTerm.toLowerCase()))
-                ).slice(0, 5);
+                const filteredDances = useMemo(() => {
+                    if (!db || db.length === 0) return [];
+                    const matches = [];
+                    if (!term) {
+                        // No search term: show the alphabetically sorted list of available dances
+                        for (const d of db) {
+                            if (selectedIds.has(d.id)) continue;
+                            matches.push(d);
+                        }
+                        return matches.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))).slice(0, maxResults);
+                    }
+
+                    for (const d of db) {
+                        if (selectedIds.has(d.id)) continue;
+                        const name = String(d.name || '').toLowerCase();
+                        const artist = String(d.artist || '').toLowerCase();
+                        const song = String(d.song || '').toLowerCase();
+                        if (name.includes(term) || artist.includes(term) || song.includes(term)) {
+                            matches.push(d);
+                        }
+                    }
+                    return matches.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))).slice(0, Math.min(matches.length, maxResults));
+                }, [db, selectedIds, term]);
 
                 const addDance = (dance) => { onChange([...selectedDances, dance]); setSearchTerm(''); setIsDropdownOpen(false); };
                 const removeDance = (id) => { onChange(selectedDances.filter(d => d.id !== id)); };
@@ -419,6 +449,50 @@
                     if (newDance.stepsheetUrl) dance.stepsheetUrl = newDance.stepsheetUrl;
                     onAddNew(dance); addDance(dance); setShowAddForm(false); setNewDance({ stepsheetUrl: '', name: '', song: '', artist: '', difficulty: Difficulty.Beginner });
                 };
+
+                // Compute and update dropdown style (positioning) to anchor it to the input
+                useEffect(() => {
+                    if (!isDropdownOpen) {
+                        setDropdownStyle(null);
+                        return;
+                    }
+                    const update = () => {
+                        if (!inputRef.current) return;
+                        const r = inputRef.current.getBoundingClientRect();
+                        const padding = 8;
+                        const leftRaw = r.left;
+                        const width = Math.max(r.width, 200);
+                        let left = leftRaw;
+                        // Clamp so dropdown doesn't overflow viewport
+                        if (left + width + padding > window.innerWidth) {
+                            left = Math.max(padding, window.innerWidth - width - padding);
+                        }
+                        const top = r.bottom + 6; // small gap below input
+                        // calculate available space below, and cap the height
+                        const bottomSpace = window.innerHeight - r.bottom;
+                        const maxHeight = Math.max(80, Math.min(300, bottomSpace - 16));
+                        setDropdownStyle({ position: 'fixed', top: `${top}px`, left: `${left}px`, width: `${width}px`, maxHeight: `${maxHeight}px`, overflowY: 'auto' });
+                    };
+                    update();
+                    window.addEventListener('resize', update);
+                    window.addEventListener('scroll', update, true);
+                    // Also try to reposition if keyboard opens (via resize delay)
+                    const t = setInterval(update, 250);
+                    return () => { window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); clearInterval(t); };
+                }, [isDropdownOpen, searchTerm]);
+
+                // Close dropdown when clicking outside
+                useEffect(() => {
+                    const handler = (e) => {
+                        if (!isDropdownOpen) return;
+                        const target = e.target;
+                        if (inputRef.current && inputRef.current.contains(target)) return;
+                        if (dropdownRef.current && dropdownRef.current.contains(target)) return;
+                        setIsDropdownOpen(false);
+                    };
+                    document.addEventListener('mousedown', handler);
+                    return () => document.removeEventListener('mousedown', handler);
+                }, [isDropdownOpen]);
 
                 return (
                     <div className="w-full">
@@ -434,10 +508,15 @@
                                 <div className="relative inline-block min-w-[250px] flex-grow">
                                     <div className="flex items-center border border-slate-300 rounded-lg px-3 py-2 bg-white focus-within:border-indigo-500 ring-0">
                                         <Search size={18} className="text-slate-400 mr-2" />
-                                        <input type="text" className="outline-none text-sm w-full" placeholder="Add dance..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setIsDropdownOpen(true); }} onFocus={() => setIsDropdownOpen(true)} />
+                                        <input ref={inputRef} type="text" className="outline-none text-sm w-full" placeholder="Add dance..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setIsDropdownOpen(true); }} onFocus={() => setIsDropdownOpen(true)} />
                                     </div>
                                     {isDropdownOpen && (
-                                        <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
+                                        <div
+                                            className="fixed z-50 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                                            style={dropdownStyle ? dropdownStyle : { visibility: 'hidden' }}
+                                            ref={dropdownRef}
+                                            onMouseDown={(e) => e.preventDefault()} // prevent input blur on click
+                                        >
                                             {filteredDances.length > 0 ? filteredDances.map(d => (
                                                 <button key={d.id} onClick={() => addDance(d)} className="w-full text-left px-4 py-2 hover:bg-indigo-50 flex items-center text-sm">
                                                     <span className={`w-2 h-2 rounded-full mr-2 ${getDifficultyColor(d.difficulty)}`}></span>
@@ -498,6 +577,97 @@
                 );
             };
 
+            /* --- AdminGlobalSearch --- */
+            const AdminGlobalSearch = ({ allDances, scheduledDanceIds, onSelect }) => {
+                const [term, setTerm] = useState('');
+                const [isOpen, setIsOpen] = useState(false);
+                const inputRef = useRef(null);
+                const dropdownRef = useRef(null);
+                const [dropdownStyle, setDropdownStyle] = useState(null);
+                const db = Array.isArray(allDances) ? allDances : [];
+                const selectedIds = scheduledDanceIds || new Set();
+                const t = (term || '').toLowerCase().trim();
+
+                const results = useMemo(() => {
+                    if (!db || db.length === 0) return [];
+                    const matches = [];
+                    if (!t) {
+                        for (const d of db) {
+                            if (selectedIds.has(d.id)) continue;
+                            matches.push(d);
+                        }
+                        return matches.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))).slice(0, 100);
+                    }
+                    for (const d of db) {
+                        if (selectedIds.has(d.id)) continue;
+                        const name = String(d.name || '').toLowerCase();
+                        const artist = String(d.artist || '').toLowerCase();
+                        const song = String(d.song || '').toLowerCase();
+                        if (name.includes(t) || artist.includes(t) || song.includes(t)) matches.push(d);
+                    }
+                    return matches.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))).slice(0, 100);
+                }, [db, selectedIds, t]);
+
+                useEffect(() => {
+                    if (!isOpen) { setDropdownStyle(null); return; }
+                    const update = () => {
+                        if (!inputRef.current) return;
+                        const r = inputRef.current.getBoundingClientRect();
+                        const padding = 8;
+                        const leftRaw = r.left;
+                        const width = Math.max(r.width, 180);
+                        let left = leftRaw;
+                        if (left + width + padding > window.innerWidth) left = Math.max(padding, window.innerWidth - width - padding);
+                        const top = r.bottom + 6;
+                        const bottomSpace = window.innerHeight - r.bottom;
+                        const maxHeight = Math.max(80, Math.min(300, bottomSpace - 16));
+                        setDropdownStyle({ position: 'fixed', top: `${top}px`, left: `${left}px`, width: `${width}px`, maxHeight: `${maxHeight}px`, overflowY: 'auto' });
+                    };
+                    update();
+                    window.addEventListener('resize', update);
+                    window.addEventListener('scroll', update, true);
+                    if (window.visualViewport) window.visualViewport.addEventListener('resize', update);
+                    const tId = setInterval(update, 250);
+                    return () => { window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); if (window.visualViewport) window.visualViewport.removeEventListener('resize', update); clearInterval(tId); };
+                }, [isOpen, term]);
+
+                useEffect(() => {
+                    const handler = (e) => {
+                        if (!isOpen) return;
+                        const t = e.target;
+                        if (inputRef.current && inputRef.current.contains(t)) return;
+                        if (dropdownRef.current && dropdownRef.current.contains(t)) return;
+                        setIsOpen(false);
+                    };
+                    document.addEventListener('mousedown', handler);
+                    return () => document.removeEventListener('mousedown', handler);
+                }, [isOpen]);
+
+                return (
+                    <div className="mt-2">
+                        <div className="flex items-center bg-white border border-slate-200 rounded px-2 py-1">
+                            <Search size={12} className="text-slate-400 mr-2" />
+                            <input ref={inputRef} value={term} onChange={(e) => { setTerm(e.target.value); setIsOpen(true); }} onFocus={() => setIsOpen(true)} placeholder="Search..." className="text-xs outline-none w-full bg-transparent" />
+                        </div>
+                        {isOpen && (
+                            <div className="fixed z-50 bg-white border border-slate-200 rounded-lg shadow-lg max-h-80 overflow-y-auto" style={dropdownStyle ? dropdownStyle : { visibility: 'hidden' }} ref={dropdownRef} onMouseDown={(e)=> e.preventDefault()}>
+                                {results.length > 0 ? results.map(d => (
+                                    <div key={d.id} className="flex items-center justify-between px-3 py-2 text-xs hover:bg-indigo-50">
+                                        <div className="truncate pr-2">
+                                            <div className="font-medium truncate">{d.name}</div>
+                                            <div className="text-[10px] text-slate-400 truncate">{d.artist}{d.song ? ` — ${d.song}` : ''}</div>
+                                        </div>
+                                        <button onClick={() => { onSelect(d); setIsOpen(false); setTerm(''); }} className="text-xs text-indigo-500 ml-2 px-2 py-1 rounded hover:bg-slate-50">Add</button>
+                                    </div>
+                                )) : (
+                                    <div className="px-4 py-2 text-xs text-slate-400">No dances found</div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
             /* --- InstructorPortal --- */
             const InstructorPortal = ({ instructor, month }) => {
                 const [activeDays, setActiveDays] = useState([]);
@@ -511,11 +681,10 @@
                 useEffect(() => {
                     const loadData = async () => {
                         try {
-                            const [avail, existingSchedules, allDances] = await Promise.all([
-                                StorageService.getAvailability(month.getMonth(), month.getFullYear()),
-                                StorageService.getMonthSchedule(month.getMonth(), month.getFullYear()),
-                                StorageService.getDances()
-                            ]);
+                            const data = await StorageService.getMonthData(month.getMonth(), month.getFullYear());
+                            const avail = data?.availability || [];
+                            const existingSchedules = data?.schedules || [];
+                            const allDances = data?.dances || [];
                             setDances(allDances || []);
 
                             if (existingSchedules && existingSchedules.length > 0) {
@@ -567,6 +736,7 @@
                     if (availableDates.length > 0 && monthlyDances.length === 0) { alert("Since you are available to teach, please select at least one dance you are prepared for."); return; }
                     setIsSaving(true);
                     try {
+                        const toSave = [];
                         await StorageService.saveAvailability({ instructorId: instructor.id, month: month.getMonth(), year: month.getFullYear(), availableDates, selectedDances: monthlyDances });
                         setSavedSuccess(true); setTimeout(() => setSavedSuccess(false), 3000);
                     } catch (err) { alert("Failed to save"); } finally { setIsSaving(false); }
@@ -667,7 +837,10 @@
                 const refreshData = async () => {
                     const m = month.getMonth(); const y = month.getFullYear();
                     try {
-                        const [schedData, availData, danceData] = await Promise.all([StorageService.getMonthSchedule(m, y), StorageService.getAvailability(m, y), StorageService.getDances()]);
+                        const data = await StorageService.getMonthData(m, y);
+                        const schedData = data?.schedules || [];
+                        const availData = data?.availability || [];
+                        const danceData = data?.dances || [];
                         const cleanSchedules = (schedData || []).map(s => ({ ...s, date: normalizeDate(s.date) }));
                         setSchedules(cleanSchedules);
                         setAvailabilities(availData || []);
@@ -707,14 +880,18 @@
                     try {
                         const newDates = generateMonthDates(bulkRecurrenceDays);
                         let addedCount = 0;
+                        const toSave = [];
                         for (const dateStr of newDates) {
                             const exists = schedules.find(s => s.date === dateStr);
                             if (!exists) {
                                 // Use formatScheduleForSave
                                 const newSchedule = formatScheduleForSave({ date: dateStr, lessons: [], isHoliday: false });
-                                await StorageService.saveDaySchedule(newSchedule);
+                                toSave.push(newSchedule);
                                 addedCount++;
                             }
+                        }
+                        if (toSave.length) {
+                            await StorageService.batchSaveDaySchedules(toSave);
                         }
                         await refreshData();
                         setStatusMsg(addedCount > 0 ? `Added ${addedCount} new days.` : "Days already exist.");
@@ -734,7 +911,7 @@
                         if (!exists) {
                             // Use formatScheduleForSave
                             const newSchedule = formatScheduleForSave({ date: singleAddDate, lessons: [], isHoliday: false });
-                            await StorageService.saveDaySchedule(newSchedule);
+                            await StorageService.batchSaveDaySchedules([newSchedule]);
                             await refreshData(); setStatusMsg("Date added."); setSingleAddDate("");
                         } else { setStatusMsg("Date already exists."); }
                     } catch (err) { setStatusMsg("Failed to add date."); } finally { setIsGenerating(false); }
@@ -832,9 +1009,10 @@
 
                             // Use formatScheduleForSave
                             const newSchedule = formatScheduleForSave({ date: dateStr, lessons: lessonsForDay, isHoliday: false });
-                            await StorageService.saveDaySchedule(newSchedule);
+                            toSave.push(newSchedule);
                             lessonsGenerated += lessonsForDay.length;
                         }
+                        if (toSave.length) await StorageService.batchSaveDaySchedules(toSave);
                         await refreshData(); setStatusMsg(`Assigned ${lessonsGenerated} lessons.`); setTimeout(() => setStatusMsg(""), 4000);
                     } catch (e) { console.error(e); setStatusMsg("Generation error."); } finally { setIsGenerating(false); }
                 };
@@ -985,7 +1163,9 @@
                                                         <div key={inst.id} className="border border-indigo-100 bg-indigo-50/30 rounded-lg p-3 transition-all shadow-sm">
                                                             <div className="flex items-center justify-between mb-2"><div className="flex items-center"><CheckCircle size={14} className="text-green-500 mr-2" /><span className="font-bold text-sm text-slate-800">{inst.name}</span></div></div>
                                                             <div className="grid grid-cols-1 gap-2">{filteredPrefDances.length > 0 ? filteredPrefDances.map(dance => (<button key={dance.id} onClick={() => handleAddLesson(selectedDate, inst.id, dance)} className="text-left text-xs p-2 bg-white border border-slate-200 rounded hover:border-indigo-400 hover:shadow-sm transition-all flex items-center justify-between group"><div className="truncate pr-2"><div className="font-semibold text-slate-700 truncate">{dance.name}</div>{dance.song && <div className="text-[10px] text-slate-400 truncate">{dance.song}</div>}<div className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] ${getDifficultyColor(dance.difficulty)}`}>{getDifficultyLabel(dance.difficulty)}</div></div><Plus size={14} className="text-indigo-400 opacity-0 group-hover:opacity-100 flex-shrink-0" /></button>)) : <div className="text-xs text-slate-400 italic px-1">All preferences scheduled.</div>}</div>
-                                                            <div className="mt-2 pt-2 border-t border-slate-100/50"><details className="group/search"><summary className="text-[10px] font-medium text-indigo-500 cursor-pointer hover:text-indigo-700 flex items-center"><Search size={10} className="mr-1" /> Search All DB</summary><div className="mt-2"><input type="text" placeholder="Search..." className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-2" onChange={(e) => setManualSearchTerm(e.target.value)} /><div className="max-h-32 overflow-y-auto space-y-1">{allDances.filter(d => (d.name.toLowerCase().includes(manualSearchTerm.toLowerCase()) || (d.song || '').toLowerCase().includes(manualSearchTerm.toLowerCase())) && !scheduledDanceIds.has(d.id)).slice(0, 10).map(dance => (<button key={`global-${dance.id}`} onClick={() => handleAddLesson(selectedDate, inst.id, dance)} className="w-full text-left text-[10px] p-1.5 bg-white border border-slate-100 rounded hover:bg-indigo-50 flex justify-between items-center"><span className="truncate w-2/3">{dance.name}</span><span className="text-slate-400">Add</span></button>))}</div></div></details></div>
+                                                            <div className="mt-2 pt-2 border-t border-slate-100/50">
+                                                                <AdminGlobalSearch allDances={allDances} scheduledDanceIds={scheduledDanceIds} onSelect={(dance) => handleAddLesson(selectedDate, inst.id, dance)} />
+                                                            </div>
                                                         </div>
                                                     );
                                                 })}

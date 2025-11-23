@@ -312,6 +312,112 @@ function clearScheduleForMonth(month, year) {
   }
 }
 
+/**
+ * Consolidated helper: returns schedules, availability, dances, and instructors
+ * for the provided month & year in a single call to reduce round trips.
+ */
+function getMonthData(month, year) {
+  return {
+    schedules: getMonthSchedule(month, year),
+    availability: getAvailability(month, year),
+    dances: getDances(),
+    instructors: getInstructors()
+  };
+}
+
+/**
+ * Batch write day schedules: accepts an array of schedule objects or a JSON string
+ * containing the array. Writes all relevant rows in a single setValues call
+ * (overwrites the full sheet data) to minimize multiple calls.
+ */
+function batchSaveDaySchedules(payload) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName('Schedules') || ensureSheet(ss, 'Schedules', ['date', 'data_json']);
+
+  let schedulesToSave = [];
+  if (typeof payload === 'string') {
+    try { schedulesToSave = JSON.parse(payload); } catch (e) { return; }
+  } else if (Array.isArray(payload)) schedulesToSave = payload;
+
+  // Normalize input to objects with string date and json string
+  schedulesToSave = schedulesToSave.map(s => {
+    if (typeof s === 'string') {
+      try { s = JSON.parse(s); } catch (e) { return null; }
+    }
+    return { date: normalizeDateString(s.date), json: JSON.stringify(s) };
+  }).filter(Boolean);
+
+  // Read all existing rows and update the list.
+  const data = sheet.getDataRange().getDisplayValues();
+  const startRow = getStartRow(data, ['date']);
+  const headers = data.slice(0, startRow);
+  const body = data.slice(startRow).map(r => [normalizeDateString(r[0]), r[1] || '']);
+
+  const existingMap = {};
+  for (let i = 0; i < body.length; i++) {
+    existingMap[body[i][0]] = i; // index into body
+  }
+
+  // Apply updates or add new
+  for (const s of schedulesToSave) {
+    if (!s || !s.date) continue;
+    const idx = existingMap[s.date];
+    if (typeof idx === 'number') {
+      body[idx][1] = s.json; // update JSON
+    } else {
+      body.push([s.date, s.json]);
+    }
+  }
+
+  // Build final data array (put headers back if they exist)
+  const finalRows = [];
+  if (headers && headers.length > 0) {
+    for (let i = 0; i < headers.length; i++) finalRows.push(headers[i]);
+  }
+  // Build 2-column representation for body
+  for (let i = 0; i < body.length; i++) {
+    finalRows.push(["'" + body[i][0], body[i][1]]);
+  }
+
+  // Clear and rewrite sheet to ensure consistent state (replace entire content)
+  sheet.clearContents();
+  sheet.getRange(1, 1, finalRows.length, finalRows[0].length).setValues(finalRows);
+}
+
+/**
+ * Batch delete multiple day schedules by date. Accepts an array or JSON string.
+ */
+function batchDeleteDaySchedules(payload) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName('Schedules');
+  if (!sheet) return;
+
+  let datesToDelete = [];
+  if (typeof payload === 'string') {
+    try { datesToDelete = JSON.parse(payload); } catch (e) { return; }
+  } else if (Array.isArray(payload)) datesToDelete = payload;
+
+  const setDel = {};
+  datesToDelete.forEach(d => setDel[normalizeDateString(d)] = true);
+
+  const data = sheet.getDataRange().getDisplayValues();
+  const startRow = getStartRow(data, ['date']);
+  const headers = data.slice(0, startRow);
+  const body = data.slice(startRow).map(r => [normalizeDateString(r[0]), r[1] || '']);
+
+  // Filter body
+  const filtered = body.filter(r => !setDel[r[0]]);
+
+  const finalRows = [];
+  if (headers && headers.length > 0) {
+    for (let i = 0; i < headers.length; i++) finalRows.push(headers[i]);
+  }
+  for (let i = 0; i < filtered.length; i++) finalRows.push(["'" + filtered[i][0], filtered[i][1]]);
+
+  sheet.clearContents();
+  if (finalRows.length) sheet.getRange(1, 1, finalRows.length, finalRows[0].length).setValues(finalRows);
+}
+
 /* --- HELPERS --- */
 
 function parseDifficulty(str) {
