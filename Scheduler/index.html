@@ -62,6 +62,105 @@
             font-family: monospace;
             overflow: auto;
         }
+
+        /* --- Dark Neon Theme Overrides --- */
+        body.dark-neon {
+            --bg: #05060a;
+            --bg-alt: #0d1117;
+            --panel: #121722;
+            --panel-alt: #1e2531;
+            --panel-hover: #1c2430;
+            --border: #29313d;
+            --text: #e2e8f0;
+            --text-dim: #748091;
+            --accent-cyan: #00eaff;
+            --accent-magenta: #ff00d4;
+            --accent-lime: #8dff00;
+            --danger: #ff4d4d;
+            --gradient-accent: linear-gradient(90deg, var(--accent-cyan), var(--accent-magenta), var(--accent-lime));
+            background: radial-gradient(circle at 20% 20%, #0a0f1c 0%, #05060a 60%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* Scrollbar updated for dark theme */
+        body.dark-neon ::-webkit-scrollbar-track { background: #10131a; }
+        body.dark-neon ::-webkit-scrollbar-thumb { background: #263042; }
+        body.dark-neon ::-webkit-scrollbar-thumb:hover { background: #345068; }
+
+        /* Common background utility overrides */
+        body.dark-neon .bg-white { background-color: var(--panel) !important; }
+        body.dark-neon .bg-gray-50,
+        body.dark-neon .bg-slate-50,
+        body.dark-neon .bg-gray-100 { background-color: var(--bg-alt) !important; }
+        body.dark-neon .bg-indigo-700 { background: var(--gradient-accent) !important; }
+        body.dark-neon .bg-indigo-600 { background: linear-gradient(135deg,#5200aa,#c800ff) !important; }
+        body.dark-neon .bg-slate-900 { background-color: #02040a !important; }
+
+        /* Text color utilities */
+        body.dark-neon .text-slate-900,
+        body.dark-neon .text-slate-800,
+        body.dark-neon .text-slate-700 { color: var(--text) !important; }
+        body.dark-neon .text-slate-600 { color: var(--text-dim) !important; }
+        body.dark-neon .text-slate-500,
+        body.dark-neon .text-slate-400 { color: #5d6978 !important; }
+        body.dark-neon .text-indigo-200 { color: #b6c9ff !important; }
+
+        /* Borders */
+        body.dark-neon .border-slate-200,
+        body.dark-neon .border-slate-300 { border-color: var(--border) !important; }
+        body.dark-neon .shadow-md,
+        body.dark-neon .shadow-sm { box-shadow: 0 4px 12px -2px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,234,255,0.05); }
+
+        /* Interactive elements */
+        body.dark-neon button,
+        body.dark-neon input,
+        body.dark-neon select,
+        body.dark-neon textarea { background-color: var(--panel); color: var(--text); }
+        body.dark-neon input::placeholder,
+        body.dark-neon textarea::placeholder { color: #485264; }
+        body.dark-neon input:focus,
+        body.dark-neon select:focus,
+        body.dark-neon textarea:focus { outline: none; border-color: var(--accent-cyan) !important; box-shadow: 0 0 0 1px var(--accent-cyan), 0 0 8px 2px rgba(0,234,255,0.35), 0 0 18px -2px rgba(255,0,212,0.4); }
+
+        body.dark-neon .hover\:bg-indigo-700:hover,
+        body.dark-neon .hover\:bg-indigo-600:hover { filter: brightness(1.15) saturate(1.2); }
+        body.dark-neon .hover\:bg-slate-200:hover { background-color: var(--panel-hover) !important; }
+
+        /* Badges (difficulty colors) */
+        body.dark-neon .bg-green-100 { background-color: rgba(0,234,255,0.12) !important; color: var(--accent-cyan) !important; }
+        body.dark-neon .bg-blue-100 { background-color: rgba(255,0,212,0.12) !important; color: var(--accent-magenta) !important; }
+        body.dark-neon .bg-orange-100 { background-color: rgba(141,255,0,0.12) !important; color: var(--accent-lime) !important; }
+        body.dark-neon .bg-red-100 { background-color: rgba(255,77,77,0.12) !important; color: var(--danger) !important; }
+
+        /* Links */
+        body.dark-neon a { color: var(--accent-cyan); }
+        body.dark-neon a:hover { color: var(--accent-magenta); }
+
+        /* Loader accent */
+        body.dark-neon .text-indigo-600 { color: var(--accent-cyan) !important; }
+        body.dark-neon .animate-spin { color: var(--accent-magenta) !important; }
+
+        /* Footer */
+        body.dark-neon footer { background: #02040a !important; border-top: 1px solid var(--border); }
+
+        /* Startup error in dark mode */
+        body.dark-neon #startup-error { background: #141a22; color: var(--danger); }
+        body.dark-neon #startup-error h2 { color: var(--danger); }
+
+        /* Subtle neon edge glow for panels */
+        body.dark-neon .rounded-lg,
+        body.dark-neon .rounded,
+        body.dark-neon .rounded-full { position: relative; }
+        body.dark-neon .rounded-lg::after,
+        body.dark-neon .rounded::after { content:""; pointer-events:none; position:absolute; inset:0; border-radius:inherit; box-shadow:0 0 0 1px rgba(0,234,255,0.15),0 0 12px -2px rgba(255,0,212,0.35); }
+
+        /* Header subtle glow */
+        body.dark-neon header { box-shadow: 0 0 0 1px rgba(0,234,255,0.25), 0 4px 18px -2px rgba(255,0,212,0.35); }
+
+        /* Selection color */
+        body.dark-neon ::selection { background: rgba(0,234,255,0.35); color: #fff; }
+    </style>
     </style>
 
     <!-- DEPENDENCIES -->
@@ -91,7 +190,7 @@
 </script>
 </head>
 
-<body class="bg-gray-50 text-slate-900">
+<body class="dark-neon">
 
     <div id="root">
         <div class="flex items-center justify-center min-h-screen text-slate-400">
