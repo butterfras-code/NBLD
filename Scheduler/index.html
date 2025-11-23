@@ -65,14 +65,15 @@
 
         /* --- Dark Neon Theme Overrides --- */
         body.dark-neon {
-            --bg: #05060a;
-            --bg-alt: #0d1117;
-            --panel: #121722;
-            --panel-alt: #1e2531;
-            --panel-hover: #1c2430;
-            --border: #29313d;
-            --text: #e2e8f0;
-            --text-dim: #748091;
+            /* Tweak colors to improve contrast for accessibility */
+            --bg: #03040a; /* slightly darker */
+            --bg-alt: #0b0f15; /* main page surface */
+            --panel: #0f1724; /* panel color slightly lifted for contrast */
+            --panel-alt: #16202b; /* alternate panel color */
+            --panel-hover: #18232e; /* hover state */
+            --border: #24303c; /* border on dark panels */
+            --text: #edf2ff; /* brighter text for body */
+            --text-dim: #9fb3c8; /* brighter dim text for better contrast */
             --accent-cyan: #00eaff;
             --accent-magenta: #ff00d4;
             --accent-lime: #8dff00;
@@ -102,8 +103,8 @@
         body.dark-neon .text-slate-800,
         body.dark-neon .text-slate-700 { color: var(--text) !important; }
         body.dark-neon .text-slate-600 { color: var(--text-dim) !important; }
-        body.dark-neon .text-slate-500,
-        body.dark-neon .text-slate-400 { color: #5d6978 !important; }
+        body.dark-neon .text-slate-500 { color: #b5c7d9 !important; }
+        body.dark-neon .text-slate-400 { color: #9aaabf !important; }
         body.dark-neon .text-indigo-200 { color: #b6c9ff !important; }
 
         /* Borders */
@@ -119,6 +120,9 @@
         body.dark-neon textarea { background-color: var(--panel); color: var(--text); }
         body.dark-neon input::placeholder,
         body.dark-neon textarea::placeholder { color: #485264; }
+
+        /* Make placeholders lighter in dark theme for accessibility */
+        body.dark-neon input::placeholder, body.dark-neon textarea::placeholder { color: var(--text-dim) !important; opacity: 0.9; }
         body.dark-neon input:focus,
         body.dark-neon select:focus,
         body.dark-neon textarea:focus { outline: none; border-color: var(--accent-cyan) !important; box-shadow: 0 0 0 1px var(--accent-cyan), 0 0 8px 2px rgba(0,234,255,0.35), 0 0 18px -2px rgba(255,0,212,0.4); }
@@ -147,6 +151,14 @@
         /* Startup error in dark mode */
         body.dark-neon #startup-error { background: #141a22; color: var(--danger); }
         body.dark-neon #startup-error h2 { color: var(--danger); }
+
+        /* Admin auth overlay accessibility overrides */
+        body.dark-neon #admin-auth-overlay { color: var(--text) !important; }
+        body.dark-neon #admin-auth-overlay h3 { color: var(--text) !important; }
+        body.dark-neon #admin-auth-overlay p { color: var(--text-dim) !important; }
+        body.dark-neon #admin-auth-overlay input { color: var(--text) !important; background-color: var(--panel) !important; border-color: var(--border) !important; }
+        body.dark-neon #admin-auth-overlay input::placeholder { color: rgba(255,255,255,0.62) !important; }
+        body.dark-neon #admin-auth-overlay .text-slate-500 { color: var(--text-dim) !important; }
 
         /* Subtle neon edge glow for panels */
         body.dark-neon .rounded-lg,
@@ -578,7 +590,7 @@
             };
 
             /* --- AdminGlobalSearch --- */
-            const AdminGlobalSearch = ({ allDances, scheduledDanceIds, onSelect }) => {
+            const AdminGlobalSearch = ({ allDances, scheduledDanceIds, onSelect, onTermChange }) => {
                 const [term, setTerm] = useState('');
                 const [isOpen, setIsOpen] = useState(false);
                 const inputRef = useRef(null);
@@ -647,7 +659,7 @@
                     <div className="mt-2">
                         <div className="flex items-center bg-white border border-slate-200 rounded px-2 py-1">
                             <Search size={12} className="text-slate-400 mr-2" />
-                            <input ref={inputRef} value={term} onChange={(e) => { setTerm(e.target.value); setIsOpen(true); }} onFocus={() => setIsOpen(true)} placeholder="Search..." className="text-xs outline-none w-full bg-transparent" />
+                            <input ref={inputRef} value={term} onChange={(e) => { const v = e.target.value; setTerm(v); setIsOpen(true); if (onTermChange) onTermChange(v); }} onFocus={() => setIsOpen(true)} placeholder="Search..." className="text-xs outline-none w-full bg-transparent" />
                         </div>
                         {isOpen && (
                             <div className="fixed z-50 bg-white border border-slate-200 rounded-lg shadow-lg max-h-80 overflow-y-auto" style={dropdownStyle ? dropdownStyle : { visibility: 'hidden' }} ref={dropdownRef} onMouseDown={(e)=> e.preventDefault()}>
@@ -657,7 +669,7 @@
                                             <div className="font-medium truncate">{d.name}</div>
                                             <div className="text-[10px] text-slate-400 truncate">{d.artist}{d.song ? ` — ${d.song}` : ''}</div>
                                         </div>
-                                        <button onClick={() => { onSelect(d); setIsOpen(false); setTerm(''); }} className="text-xs text-indigo-500 ml-2 px-2 py-1 rounded hover:bg-slate-50">Add</button>
+                                        <button onClick={() => { onSelect(d); setIsOpen(false); setTerm(''); if (onTermChange) onTermChange(''); }} className="text-xs text-indigo-500 ml-2 px-2 py-1 rounded hover:bg-slate-50">Add</button>
                                     </div>
                                 )) : (
                                     <div className="px-4 py-2 text-xs text-slate-400">No dances found</div>
@@ -1164,7 +1176,7 @@
                                                             <div className="flex items-center justify-between mb-2"><div className="flex items-center"><CheckCircle size={14} className="text-green-500 mr-2" /><span className="font-bold text-sm text-slate-800">{inst.name}</span></div></div>
                                                             <div className="grid grid-cols-1 gap-2">{filteredPrefDances.length > 0 ? filteredPrefDances.map(dance => (<button key={dance.id} onClick={() => handleAddLesson(selectedDate, inst.id, dance)} className="text-left text-xs p-2 bg-white border border-slate-200 rounded hover:border-indigo-400 hover:shadow-sm transition-all flex items-center justify-between group"><div className="truncate pr-2"><div className="font-semibold text-slate-700 truncate">{dance.name}</div>{dance.song && <div className="text-[10px] text-slate-400 truncate">{dance.song}</div>}<div className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] ${getDifficultyColor(dance.difficulty)}`}>{getDifficultyLabel(dance.difficulty)}</div></div><Plus size={14} className="text-indigo-400 opacity-0 group-hover:opacity-100 flex-shrink-0" /></button>)) : <div className="text-xs text-slate-400 italic px-1">All preferences scheduled.</div>}</div>
                                                             <div className="mt-2 pt-2 border-t border-slate-100/50">
-                                                                <AdminGlobalSearch allDances={allDances} scheduledDanceIds={scheduledDanceIds} onSelect={(dance) => handleAddLesson(selectedDate, inst.id, dance)} />
+                                                                <AdminGlobalSearch allDances={allDances} scheduledDanceIds={scheduledDanceIds} onSelect={(dance) => handleAddLesson(selectedDate, inst.id, dance)} onTermChange={(v)=> setManualSearchTerm(v)} />
                                                             </div>
                                                         </div>
                                                     );
@@ -1256,12 +1268,12 @@
                                     </div>
                                 )}
                                 {showAdminAuth && (
-                                    <div className="absolute inset-0 z-10 bg-white/95 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center p-6 animate-fade-in">
-                                        <div className="bg-indigo-50 p-3 rounded-full mb-4"><ShieldCheck className="text-indigo-600" size={32} /></div>
+                                    <div id="admin-auth-overlay" className="absolute inset-0 z-10 bg-slate-900/95 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center p-6 animate-fade-in text-white">
+                                            <div className="bg-indigo-800/40 p-3 rounded-full mb-4"><ShieldCheck className="text-indigo-300" size={32} /></div>
                                         <h3 className="text-lg font-bold text-slate-800 mb-1">Admin Access</h3><p className="text-xs text-slate-500 mb-4">Enter password to continue</p>
                                         <form onSubmit={verifyAdminPassword} className="w-full max-w-xs">
-                                            <input type="password" autoFocus value={adminPwd} onChange={(e) => { setAdminPwd(e.target.value); setAuthError(false); }} className={`w-full px-4 py-2 rounded-lg border ${authError ? 'border-red-300 bg-red-50' : 'border-slate-300 focus:border-indigo-500'} outline-none text-sm mb-2`} placeholder="Password" />
-                                            {authError && <p className="text-xs text-red-500 mb-3 text-center font-medium">Incorrect password</p>}
+                                            <input type="password" autoFocus value={adminPwd} onChange={(e) => { setAdminPwd(e.target.value); setAuthError(false); }} className={`w-full px-4 py-2 rounded-lg border ${authError ? 'border-red-500 bg-red-900/30 text-red-200' : 'border-slate-700 bg-slate-800 focus:border-indigo-500'} outline-none text-sm mb-2`} placeholder="Password" />
+                                            {authError && <p className="text-xs text-red-400 mb-3 text-center font-medium">Incorrect password</p>}
                                             <div className="flex gap-2 mt-2"><button type="button" onClick={() => setShowAdminAuth(false)} className="flex-1 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-100">Cancel</button><button type="submit" className="flex-1 py-2 rounded-lg text-sm bg-indigo-600 text-white hover:bg-indigo-700 font-medium">Unlock</button></div>
                                         </form>
                                     </div>
@@ -1282,6 +1294,74 @@
                     </Layout>
                 );
             };
+
+            // Contrast checking helpers (audit foreground/background combos)
+            const sRGBtoLinear = (c) => {
+                c = c/255;
+                return c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4);
+            };
+            const luminance = ({ r, g, b }) => {
+                return 0.2126 * sRGBtoLinear(r) + 0.7152 * sRGBtoLinear(g) + 0.0722 * sRGBtoLinear(b);
+            };
+            const parseColor = (val) => {
+                if (!val) return { r:0, g:0, b:0 };
+                val = val.trim();
+                if (val.startsWith('rgb')) {
+                    const m = val.match(/rgba?\(([^)]+)\)/);
+                    if (!m) return { r:0, g:0, b:0 };
+                    const parts = m[1].split(',').map(p => parseFloat(p));
+                    return { r: parts[0], g: parts[1], b: parts[2] };
+                }
+                if (val.startsWith('#')) {
+                    let h = val.replace('#', '');
+                    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+                    const bigint = parseInt(h, 16);
+                    return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+                }
+                // fallback for rgb hex-like string
+                return { r:0, g:0, b:0 };
+            };
+            const contrastRatio = (fg, bg) => {
+                const rgb1 = parseColor(fg);
+                const rgb2 = parseColor(bg);
+                const L1 = luminance(rgb1);
+                const L2 = luminance(rgb2);
+                const lighter = Math.max(L1, L2);
+                const darker = Math.min(L1, L2);
+                return (lighter + 0.05) / (darker + 0.05);
+            };
+            const runContrastChecks = () => {
+                try {
+                    const checks = [];
+                    const pushCheck = (name, el) => {
+                        if (!el) return;
+                        const cs = window.getComputedStyle(el);
+                        checks.push({ name, fg: cs.color, bg: cs.backgroundColor });
+                    };
+                    pushCheck('body', document.body);
+                    pushCheck('header', document.querySelector('header'));
+                    document.querySelectorAll('button, .bg-indigo-600, .bg-slate-50, .bg-white, .bg-slate-900, input, textarea').forEach((el, idx) => {
+                        const name = el.tagName.toLowerCase() + '-' + idx;
+                        const cs = window.getComputedStyle(el);
+                        checks.push({ name, fg: cs.color, bg: cs.backgroundColor });
+                    });
+                    // Panels: card-like elements
+                    document.querySelectorAll('.rounded-xl, .rounded-lg, .bg-white').forEach((el, idx) => { const cs = window.getComputedStyle(el); checks.push({ name: 'panel-'+idx, fg: cs.color, bg: cs.backgroundColor }); });
+
+                    const low = checks.map(c => ({ ...c, ratio: contrastRatio(c.fg, c.bg) })).filter(c => c.ratio < 4.5);
+                    console.group('Contrast check: ' + checks.length + ' items');
+                    if (low.length) console.table(low.map(x => ({ name: x.name, fg: x.fg, bg: x.bg, ratio: x.ratio.toFixed(2) })));
+                    else console.log('All checked combos meet 4.5:1');
+                    console.groupEnd();
+                    return low;
+                } catch (e) {
+                    console.error('Contrast check failed', e);
+                    return [];
+                }
+            };
+
+            // Run contrast checks after render so CSS variables apply
+            setTimeout(() => { const issues = runContrastChecks(); if (issues.length) console.warn('Contrast warnings: examine console for details'); }, 1200);
 
             // Mount
             const rootElement = document.getElementById('root');
