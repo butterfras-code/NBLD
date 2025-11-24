@@ -1,0 +1,10 @@
+{
+  "hosting": {
+    "public": "d:\\NBLD\\Scheduler",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  }
+}

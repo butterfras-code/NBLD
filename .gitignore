@@ -13,6 +13,9 @@ Thumbs.db
 /scheduler/firebase.config
 firebase.config
 
+# Ignore Firebase initialization file containing API key
+firebase-init.js
+
 # Ignore other sensitive files
 .env
 *.env
