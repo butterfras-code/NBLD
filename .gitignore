@@ -10,6 +10,7 @@ logs/
 Thumbs.db
 
 # Ignore Firebase config file
+/scheduler/firebase.config
 firebase.config
 
 # Ignore other sensitive files
