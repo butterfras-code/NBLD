@@ -197,10 +197,15 @@
         ];
 
         const neonRaw = ["Kimber", "John S", "John E", "Amanda", "Esteban", "Jasmin", "Justin", "Nickolas", "Mark"];
+        const neonPhotos = {
+            Amanda: "assets/images/amanda.jpg",
+            Justin: "assets/images/justin.jpg"
+        };
         const neonTeam = neonRaw.sort().map(name => ({
             name: name,
             group: "Neon Boots",
-            type: "neon"
+            type: "neon",
+            photo: neonPhotos[name] || undefined
         }));
 
         const allInstructors = { guests, neonTeam };
