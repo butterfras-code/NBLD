@@ -119,6 +119,17 @@
         .animate-pulse-mild {
             animation: pulse-mild 2.5s infinite ease-in-out;
         }
+
+        /* Instructor headshot styling */
+        .instructor-photo {
+            width: 56px; /* w-14 size from tailwind */
+            height: 56px; /* h-14 */
+            border-radius: 9999px; /* rounded-full */
+            object-fit: cover; /* Crop image to fill */
+            box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.08);
+            display: inline-block;
+        }
     </style>
 </head>
 <body class="bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]">
@@ -182,7 +193,7 @@
             { name: "Yoshi", group: "Round-Up Saloon, Dallas", type: "guest" },
             { name: "Juan", group: "Round-Up Saloon, Dallas", type: "guest" },
             { name: "Emily", group: "Round-Up Saloon, Dallas", type: "guest" },
-            { name: "Britt", group: "Cross the Line Dancing, Houston", type: "guest" }
+            { name: "Britt", group: "Cross the Line Dancing, Houston", type: "guest", photo: "assets/images/britt.jpeg" }
         ];
 
         const neonRaw = ["Kimber", "John S", "John E", "Amanda", "Esteban", "Jasmin", "Justin", "Nickolas", "Mark"];
@@ -364,9 +375,13 @@
             allInstructors.guests.forEach(guest => {
                 html += `
                     <div class="glass-card p-4 rounded-xl flex items-center space-x-4 mb-3 active:scale-[0.98] transition-transform animate-fade-in">
-                        <div class="w-14 h-14 rounded-full bg-gradient-to-br from-pink-600 to-purple-600 flex items-center justify-center text-white shadow-lg shrink-0">
-                            <span class="font-bold text-xl">${guest.name.charAt(0)}</span>
-                        </div>
+                                    ${guest.photo ? `
+                                        <img src="${guest.photo}" alt="${guest.name} headshot" class="instructor-photo shrink-0" loading="lazy" decoding="async" width="56" height="56">
+                                    ` : `
+                                        <div class="w-14 h-14 rounded-full bg-gradient-to-br from-pink-600 to-purple-600 flex items-center justify-center text-white shadow-lg shrink-0">
+                                            <span class="font-bold text-xl">${guest.name.charAt(0)}</span>
+                                        </div>
+                                    `}
                         <div>
                             <h3 class="font-bold text-lg text-white">${guest.name}</h3>
                             <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold">${guest.group}</p>
@@ -380,9 +395,13 @@
             allInstructors.neonTeam.forEach(member => {
                  html += `
                     <div class="glass-card p-4 rounded-xl flex items-center space-x-4 mb-3 active:scale-[0.98] transition-transform animate-fade-in">
-                        <div class="w-14 h-14 rounded-full bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center text-white shadow-lg shrink-0">
-                            <span class="font-bold text-xl">${member.name.charAt(0)}</span>
-                        </div>
+                        ${member.photo ? `
+                            <img src="${member.photo}" alt="${member.name} headshot" class="instructor-photo shrink-0" loading="lazy" decoding="async" width="56" height="56">
+                        ` : `
+                            <div class="w-14 h-14 rounded-full bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center text-white shadow-lg shrink-0">
+                                <span class="font-bold text-xl">${member.name.charAt(0)}</span>
+                            </div>
+                        `}
                         <div>
                             <h3 class="font-bold text-lg text-white">${member.name}</h3>
                             <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold">${member.group}</p>
