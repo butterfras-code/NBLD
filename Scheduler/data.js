@@ -94,6 +94,13 @@ export const StorageService = {
     });
   },
 
+  async clearAllDances() {
+    const snap = await getDocs(collection(db, COL_DANCES));
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  },
+
   // Availability
   async getAvailability(month, year) {
     const q = query(collection(db, COL_AVAIL), where('month', '==', month), where('year', '==', year));

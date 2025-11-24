@@ -56,6 +56,10 @@ function doGet(e) {
           response = createJsonResponse({ error: 'Missing data parameter' }, 400, callback);
         }
         break;
+      case 'clearDances':
+        // This just acknowledges - actual clearing happens in Firebase on client side
+        response = createJsonResponse({ success: true, message: 'Clear dances acknowledged' }, 200, callback);
+        break;
       default:
         response = createJsonResponse({ error: 'Invalid action parameter' }, 400, callback);
     }
@@ -149,8 +153,8 @@ function getDances() {
   // Detect header row (skip it if present)
   const startRow = isHeaderRow(data[0]) ? 1 : 0;
   
-  // Expected columns: Dance Name, Artist, Song, Level/Difficulty, Stepsheet URL, Style
-  // Adjust based on your actual sheet structure
+  // Expected columns: Dance Name, Level, Song, Artist, Stepsheet URL
+  // Based on the actual sheet structure shown in the spreadsheet
   for (let i = startRow; i < data.length; i++) {
     const row = data[i];
     
@@ -158,16 +162,15 @@ function getDances() {
     if (!row[0] && !row[1]) continue;
     
     const danceName = String(row[0] || '').trim();
-    const artist = String(row[1] || '').trim();
+    const difficultyRaw = String(row[1] || '').trim();
     const song = String(row[2] || '').trim();
-    const difficultyRaw = String(row[3] || '').trim();
+    const artist = String(row[3] || '').trim();
     const stepsheetUrl = String(row[4] || '').trim();
-    const style = String(row[5] || '').trim();
     
-    if (!danceName || !artist) continue; // Must have at least name and artist
+    if (!danceName) continue; // Must have at least name
     
-    // Generate unique ID based on name and artist
-    const id = 'd_' + sanitizeForId(danceName + artist);
+    // Generate unique ID based on name and difficulty
+    const id = 'd_' + sanitizeForId(danceName + difficultyRaw);
     
     dances.push({
       id: id,
@@ -176,7 +179,7 @@ function getDances() {
       song: song,
       difficulty: parseDifficulty(difficultyRaw),
       stepsheetUrl: stepsheetUrl,
-      style: style
+      style: ''
     });
   }
   

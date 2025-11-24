@@ -349,6 +349,67 @@
         /* --- AdminDashboard (trimmed for brevity but logic preserved) --- */
         const AdminDashboard = ({ month, instructors }) => {
           const [schedules,setSchedules]=useState([]); const [availabilities,setAvailabilities]=useState([]); const [allDances,setAllDances]=useState([]); const [activeDates,setActiveDates]=useState([]); const [selectedDate,setSelectedDate]=useState(null); const [draggedLesson,setDraggedLesson]=useState(null); const [isGenerating,setIsGenerating]=useState(false); const [statusMsg,setStatusMsg]=useState(""); const [manualSearchTerm,setManualSearchTerm]=useState(""); const [showCalendarModal,setShowCalendarModal]=useState(false); const [bulkRecurrenceDays,setBulkRecurrenceDays]=useState([4]); const [singleAddDate,setSingleAddDate]=useState("");
+          // Dances Modal State
+          const [showDancesModal, setShowDancesModal] = useState(false);
+          const [dancesTab, setDancesTab] = useState('actions'); // 'actions' or 'browse'
+
+          function DancesModal() {
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full p-6 relative animate-fade-in">
+                  <button onClick={()=>setShowDancesModal(false)} className="absolute top-3 right-3 text-slate-400 hover:text-red-500"><X size={22}/></button>
+                  <div className="flex items-center mb-6 gap-4">
+                    <ListMusic size={24} className="text-indigo-600"/>
+                    <h2 className="text-xl font-bold text-slate-800">Dances</h2>
+                  </div>
+                  <div className="flex gap-2 mb-4">
+                    <button onClick={()=>setDancesTab('actions')} className={`px-4 py-2 rounded-lg text-sm font-medium ${dancesTab==='actions'?'bg-indigo-600 text-white':'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Actions</button>
+                    <button onClick={()=>setDancesTab('browse')} className={`px-4 py-2 rounded-lg text-sm font-medium ${dancesTab==='browse'?'bg-indigo-600 text-white':'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Browse</button>
+                  </div>
+                  {dancesTab==='actions' && (
+                    <div className="flex flex-col gap-4">
+                      <button onClick={handleImportDancesFromSheets} disabled={isGenerating} className="flex items-center text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50" title="Import dances from Google Sheets"><Download size={16} className="mr-2"/> Import Dances</button>
+                      <button onClick={handleClearAllDances} disabled={isGenerating} className="flex items-center text-sm bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg disabled:opacity-50" title="Clear all dances from database"><Trash2 size={16} className="mr-2"/> Clear All Dances</button>
+                      <button onClick={()=>setDancesTab('browse')} className="flex items-center text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg"><ListMusic size={16} className="mr-2"/> Browse Dances</button>
+                    </div>
+                  )}
+                  {dancesTab==='browse' && (
+                    <div className="overflow-x-auto max-h-[60vh]">
+                      <table className="min-w-full text-xs border border-slate-200 rounded-lg">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-3 py-2 border-b text-left">Name</th>
+                            <th className="px-3 py-2 border-b text-left">Level</th>
+                            <th className="px-3 py-2 border-b text-left">Song</th>
+                            <th className="px-3 py-2 border-b text-left">Artist</th>
+                            <th className="px-3 py-2 border-b text-left">Stepsheet</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allDances.length===0 ? (
+                            <tr><td colSpan={5} className="text-center text-slate-400 py-6">No dances found.</td></tr>
+                          ) : allDances.map(dance => (
+                            <tr key={dance.id} className="hover:bg-slate-50">
+                              <td className="px-3 py-2 font-medium text-slate-800">{dance.name}</td>
+                              <td className="px-3 py-2">{getDifficultyLabel(dance.difficulty)}</td>
+                              <td className="px-3 py-2">{dance.song}</td>
+                              <td className="px-3 py-2">{dance.artist}</td>
+                              <td className="px-3 py-2">
+                                {dance.stepsheetUrl ? <a href={dance.stepsheetUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">Link</a> : <span className="text-slate-400">—</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="flex justify-end mt-4">
+                        <button onClick={()=>setDancesTab('actions')} className="px-4 py-2 text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">Back</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
           const formatScheduleForSave = (s)=>({ date:s.date, lessons:s.lessons||[], isHoliday:!!s.isHoliday, note:s.note||'' });
           const scheduledDanceIds= useMemo(()=>{ const ids=new Set(); schedules.forEach(day=> day.lessons && day.lessons.forEach(l=> ids.add(l.danceId))); return ids; },[schedules]);
           const refreshData = async ()=>{ try { const data = await StorageService.getMonthData(month.getMonth(), month.getFullYear()); const schedData=data?.schedules||[]; const availData=data?.availability||[]; const danceData=data?.dances||[]; const clean=schedData.map(s=> ({...s,date:normalizeDate(s.date)})); setSchedules(clean); setAvailabilities(availData); setAllDances(danceData); const loadedDates= clean.map(s=> s.date); setActiveDates(loadedDates.length? Array.from(new Set(loadedDates)).sort(): []); } catch(e){ setStatusMsg('Error loading'); } };
@@ -357,7 +418,24 @@
           const handleBulkAddDates= async ()=>{ setIsGenerating(true); try { const newDates=generateMonthDates(bulkRecurrenceDays); const toSave=[]; let added=0; for(const dateStr of newDates){ if(!schedules.find(s=>s.date===dateStr)){ toSave.push(formatScheduleForSave({ date:dateStr, lessons:[], isHoliday:false })); added++; } } if(toSave.length) await StorageService.batchSaveDaySchedules(toSave); await refreshData(); setStatusMsg(added? `Added ${added}`: 'Days already exist'); setShowCalendarModal(false); } catch(e){ setStatusMsg('Error'); } finally { setIsGenerating(false);} };
           const handleAddSingleDate= async ()=>{ if(!singleAddDate) return; setIsGenerating(true); try { const d=parseYMD(singleAddDate); if(d.getMonth()!==month.getMonth()||d.getFullYear()!==month.getFullYear()){ if(!confirm('Outside selected month. Add anyway?')){ setIsGenerating(false); return;} } if(!schedules.find(s=>s.date===singleAddDate)){ await StorageService.batchSaveDaySchedules([formatScheduleForSave({ date:singleAddDate, lessons:[], isHoliday:false })]); await refreshData(); setStatusMsg('Date added'); setSingleAddDate(''); } else setStatusMsg('Exists'); } catch(e){ setStatusMsg('Failed'); } finally { setIsGenerating(false);} };
           const handleRemoveDate= async (dateStr)=>{ if(!confirm('Remove date and all lessons?')) return; setIsGenerating(true); try { await StorageService.deleteDaySchedule(dateStr); await refreshData(); if(selectedDate===dateStr) setSelectedDate(null); setStatusMsg('Removed'); } catch(e){ setStatusMsg('Failed'); } finally { setIsGenerating(false);} };
-          const handleClearSchedule= async ()=>{ if(!confirm('Reset entire month schedule?')) return; setIsGenerating(true); try { await StorageService.clearScheduleForMonth(month.getMonth(), month.getFullYear()); await refreshData(); setStatusMsg('Reset'); } catch(e){ setStatusMsg('Failed'); } finally { setIsGenerating(false);} };
+          const handleClearSchedule= async ()=>{ if(!confirm('Reset entire month schedule?')) return; setIsGenerating(true); try { await StorageService.clearScheduleForMonth(month.getMonth(), month.getFullYear()); await refreshData(); setStatusMsg('Reset'); } catch(e){ setStatusMsg('Failed'); } finally { setIsGenerating(false); } };
+          const handleClearAllDances = async () => { 
+            if(!confirm('⚠️ WARNING: This will permanently delete ALL dances from the database.\n\nThis cannot be undone. Are you sure?')) return; 
+            setIsGenerating(true); 
+            setStatusMsg('Clearing all dances...'); 
+            try { 
+
+              await refreshData(); 
+              setStatusMsg('✓ All dances cleared'); 
+              setTimeout(() => setStatusMsg(''), 3000);
+            } catch(e) { 
+              console.error('Clear dances error:', e);
+              setStatusMsg('✗ Failed to clear dances'); 
+              setTimeout(() => setStatusMsg(''), 5000);
+            } finally { 
+              setIsGenerating(false);
+            } 
+          };
           const toggleHoliday= async (dateStr)=>{ const schedule = schedules.find(s=>s.date===dateStr)||{date:dateStr, lessons:[]}; const updated = formatScheduleForSave({...schedule, isHoliday: !schedule.isHoliday}); await StorageService.saveDaySchedule(updated); setSchedules(prev=>{ const idx=prev.findIndex(s=>s.date===dateStr); if(idx>=0){ const copy=[...prev]; copy[idx]=updated; return copy;} return [...prev, updated]; }); };
           const handleAddLesson = async (dateStr, instructorId, dance)=>{ const schedule=schedules.find(s=>s.date===dateStr)||{date:dateStr, lessons:[], isHoliday:false}; if(schedule.lessons.find(l=>l.danceId===dance.id)) return; const newLesson={ id:`${dateStr}-${instructorId}-${Date.now()}`, danceId:dance.id, danceName:dance.name, instructorId, difficulty:dance.difficulty, timeSlot:''}; const updatedLessons=[...schedule.lessons, newLesson].sort((a,b)=> a.difficulty-b.difficulty); updatedLessons.forEach((l,i)=> l.timeSlot= i< TIME_SLOTS.length? TIME_SLOTS[i] : 'Overflow'); const updated=formatScheduleForSave({...schedule, lessons:updatedLessons}); setSchedules(prev=>{ const idx=prev.findIndex(s=>s.date===dateStr); if(idx>=0){ const copy=[...prev]; copy[idx]=updated; return copy;} return [...prev, updated]; }); await StorageService.saveDaySchedule(updated); };
           const handleDeleteLesson= async (dateStr, lessonId)=>{ const schedule=schedules.find(s=>s.date===dateStr); if(!schedule) return; const updatedLessons=schedule.lessons.filter(l=>l.id!==lessonId); updatedLessons.forEach((l,i)=>{ if(i< TIME_SLOTS.length) l.timeSlot=TIME_SLOTS[i]; }); const updated=formatScheduleForSave({...schedule, lessons:updatedLessons}); setSchedules(prev=> prev.map(s=> s.date===dateStr? updated : s)); await StorageService.saveDaySchedule(updated); };
@@ -546,7 +624,8 @@
                       <button onClick={handleClearSchedule} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Reset"><Trash2 size={18}/></button>
                       <div className="h-4 w-px bg-slate-200 mx-1"/>
                       <ManageInstructorsButton refreshInstructors={refreshData} />
-                      <button onClick={handleImportDancesFromSheets} disabled={isGenerating} className="flex items-center text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg disabled:opacity-50" title="Import dances from Google Sheets"><Download size={16} className="mr-2"/> Import Dances</button>
+                      <button onClick={()=>setShowDancesModal(true)} className="flex items-center text-sm bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-2 rounded-lg" title="Manage dances"><ListMusic size={16} className="mr-2"/> Dances</button>
+                      {showDancesModal && <DancesModal />}
                       <button onClick={()=>setShowCalendarModal(true)} className="flex items-center text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg"><Settings size={16} className="mr-2"/> Manage Dates</button>
                       <button onClick={handleAutoGenerate} disabled={isGenerating} className="text-sm flex items-center bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg disabled:opacity-50">{isGenerating? <RefreshCcw className="animate-spin mr-2" size={16}/>: <Wand2 size={16} className="mr-2"/>}Generate</button>
                       <button onClick={handleExport} className="text-sm flex items-center bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg" title="Export as CSV"><Download size={16} className="mr-2"/> CSV</button>
