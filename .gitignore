@@ -1,0 +1,21 @@
+# Ignore node_modules
+node_modules/
+
+# Ignore logs
+logs/
+*.log
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore Firebase config file
+firebase.config
+
+# Ignore other sensitive files
+.env
+*.env
+
+# Ignore build artifacts
+dist/
+build/
