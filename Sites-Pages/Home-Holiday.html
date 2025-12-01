@@ -822,15 +822,33 @@
             function _buildMonthElements() {
                 const sortedMonthKeys = Object.keys(state.groupedData).sort().reverse();
                 const today = new Date();
-                today.setHours(0, 0, 0, 0); 
-                const currentMonthKey = today.toISOString().substring(0, 7); 
+                today.setHours(0, 0, 0, 0);
+                
+                // Find the next upcoming lesson date across all months
+                let nextLessonDate = null;
+                for (const monthKey of sortedMonthKeys) {
+                    const monthData = state.groupedData[monthKey];
+                    for (const dayKey of Object.keys(monthData.days)) {
+                        const dayDate = new Date(dayKey + 'T00:00:00');
+                        if (dayDate >= today) {
+                            if (!nextLessonDate || dayDate < nextLessonDate) {
+                                nextLessonDate = dayDate;
+                            }
+                        }
+                    }
+                }
+                
+                // Determine which month should be expanded (the one with the next lesson)
+                const monthKeyToExpand = nextLessonDate 
+                    ? nextLessonDate.toISOString().substring(0, 7) 
+                    : today.toISOString().substring(0, 7); // fallback to current month
                 
                 const fragment = document.createDocumentFragment();
 
 
                 for (const monthKey of sortedMonthKeys) {
                     const monthData = state.groupedData[monthKey];
-                    const isCurrentMonth = monthKey === currentMonthKey;
+                    const isCurrentMonth = monthKey === monthKeyToExpand;
                     const isCollapsed = !isCurrentMonth;
 
 
@@ -1174,7 +1192,32 @@
 
                     document.querySelectorAll('.month-container').forEach(container => {
                         const monthKey = container.getAttribute('data-month-key');
-                        const isCurrentMonth = monthKey === currentMonthKey;
+                        
+                        // Find next lesson date to determine which month to keep expanded
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        let nextLessonDate = null;
+                        
+                        const allMonthContainers = document.querySelectorAll('.month-container');
+                        allMonthContainers.forEach(mc => {
+                            const mk = mc.getAttribute('data-month-key');
+                            const dayCards = mc.querySelectorAll('.day-card');
+                            dayCards.forEach(card => {
+                                const cardId = card.id.replace('card-', '');
+                                const dayDate = new Date(cardId + 'T00:00:00');
+                                if (dayDate >= today) {
+                                    if (!nextLessonDate || dayDate < nextLessonDate) {
+                                        nextLessonDate = dayDate;
+                                    }
+                                }
+                            });
+                        });
+                        
+                        const monthKeyToExpand = nextLessonDate 
+                            ? nextLessonDate.toISOString().substring(0, 7) 
+                            : today.toISOString().substring(0, 7);
+                        
+                        const isCurrentMonth = monthKey === monthKeyToExpand;
                         
                         // Restore original collapsed state
                         if (!isCurrentMonth) {

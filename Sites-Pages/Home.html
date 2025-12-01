@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full"> <!-- Class will be 'dark-mode' or '' -->
 <head>
-    <meta charset="UTF--8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Neon Boots Line Dance Schedule - Neon Boots</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -57,45 +57,181 @@
         }
     </script>
     <style>
+        /* Holiday Decorations */
+        @keyframes snowfall {
+            0% { transform: translateY(-10px) translateX(0px); opacity: 1; }
+            100% { transform: translateY(100vh) translateX(50px); opacity: 0.3; }
+        }
+        
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.7; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+        
+        @keyframes sway {
+            0%, 100% { transform: rotate(-2deg); }
+            50% { transform: rotate(2deg); }
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { filter: brightness(1) drop-shadow(0 0 5px currentColor); }
+            50% { filter: brightness(1.3) drop-shadow(0 0 15px currentColor); }
+        }
+        
+        @keyframes slide-garland {
+            0% { background-position: 0 0; }
+            100% { background-position: 100px 0; }
+        }
+        
+        /* Holiday ribbon effect */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 8px;
+            background: repeating-linear-gradient(
+                90deg,
+                #c41e3a 0px,
+                #c41e3a 20px,
+                #ffffff 20px,
+                #ffffff 40px,
+                #165b33 40px,
+                #165b33 60px,
+                #ffffff 60px,
+                #ffffff 80px
+            );
+            z-index: 10000;
+            pointer-events: none;
+            animation: slide-garland 2s linear infinite;
+        }
+        
+        html.dark-mode body::before {
+            background: repeating-linear-gradient(
+                90deg,
+                #ff6b9d 0px,
+                #ff6b9d 20px,
+                #4ecdc4 20px,
+                #4ecdc4 40px,
+                #ffe66d 40px,
+                #ffe66d 60px,
+                #4ecdc4 60px,
+                #4ecdc4 80px
+            );
+        }
+        
+        /* Corner wreaths */
+        body::after {
+            content: '🎀';
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            font-size: 3rem;
+            z-index: 9998;
+            pointer-events: none;
+            animation: sway 4s ease-in-out infinite;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        }
+        
+        .snowflake {
+            position: fixed;
+            top: -10px;
+            color: white;
+            font-size: 1.5rem;
+            opacity: 0.8;
+            pointer-events: none;
+            z-index: 9999;
+            text-shadow: 0 0 5px rgba(255,255,255,0.8);
+            animation: snowfall linear infinite;
+        }
+        
+        .holiday-lights {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            display: flex;
+            justify-content: space-around;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .light {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: twinkle 2s ease-in-out infinite;
+        }
+        
+        .light-sm {
+            width: 8px;
+            height: 8px;
+        }
+        
+        .light:nth-child(1) { background: #ff0000; animation-delay: 0s; }
+        .light:nth-child(2) { background: #00ff00; animation-delay: 0.3s; }
+        .light:nth-child(3) { background: #0000ff; animation-delay: 0.6s; }
+        .light:nth-child(4) { background: #ffff00; animation-delay: 0.9s; }
+        .light:nth-child(5) { background: #ff00ff; animation-delay: 1.2s; }
+        .light:nth-child(6) { background: #00ffff; animation-delay: 1.5s; }
+        .light:nth-child(7) { background: #ff6600; animation-delay: 1.8s; }
+        
+        .ornament {
+            display: inline-block;
+            animation: sway 3s ease-in-out infinite;
+            transform-origin: top center;
+        }
+        
+        .sparkle {
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+        
         /* Reusable glass-card like LDE-21 */
         .glass-card {
             background: var(--bg-card);
             -webkit-backdrop-filter: blur(8px);
             backdrop-filter: blur(8px);
-            border: 1px solid rgba(0,0,0,0.06);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+            border: 2px solid var(--border-color-light);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 0 15px var(--glow-shadow);
+            position: relative;
+        }
+        
+        .glass-card:hover {
+            box-shadow: 0 12px 28px rgba(0,0,0,0.18), 0 0 25px var(--glow-shadow);
         }
         /* --- THEME VARIABLES --- */
         :root {
-            /* Light Theme (Autumn) */
-            --bg-html: #fdf6ec;
-            --bg-body-image: url('https://www.transparenttextures.com/patterns/wood-pattern.png');
-            --text-primary: #5A3825; --text-secondary: rgba(90, 56, 37, 0.8);
-            --text-header: #C85A17; --text-accent: #C85A17; --text-highlight: #C85A17;
-            --text-inverted: #FFD966; --text-link: #C85A17;
-            --text-on-gold: #5A3825; /* ADDED: For lesson time pill */
-            --bg-sticky: rgba(253, 246, 236, 0.9); --bg-card: rgba(255, 255, 255, 0.95);
-            --bg-card-header: #5A3825; --bg-input: #ffffff;
-            --bg-toggle-hover: rgba(90, 56, 37, 0.1); --border-color: #FFD966;
-            --border-color-light: rgba(255, 217, 102, 0.5); --border-input: rgba(90, 56, 37, 0.2);
-            --border-accent: #C85A17; --highlight-border: #C85A17;
-            --highlight-shadow: rgba(200, 90, 23, 0.5); --glow-shadow: rgba(255, 170, 0, 0.3);
+            /* Light Theme (Holiday Cozy) */
+            --bg-html: #f8f3ed;
+            --bg-body-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="10" y="30" font-size="20" opacity="0.08">❄️</text><text x="60" y="70" font-size="15" opacity="0.06">🎄</text><text x="30" y="80" font-size="18" opacity="0.07">⛄</text></svg>');
+            --text-primary: #2d5016; --text-secondary: rgba(45, 80, 22, 0.75);
+            --text-header: #c41e3a; --text-accent: #165b33; --text-highlight: #c41e3a;
+            --text-inverted: #fffacd; --text-link: #c41e3a;
+            --text-on-gold: #2d5016; /* ADDED: For lesson time pill */
+            --bg-sticky: rgba(248, 243, 237, 0.95); --bg-card: rgba(255, 255, 255, 0.98);
+            --bg-card-header: linear-gradient(135deg, #c41e3a 0%, #165b33 100%); --bg-input: #ffffff;
+            --bg-toggle-hover: rgba(196, 30, 58, 0.1); --border-color: #ffd700;
+            --border-color-light: rgba(255, 215, 0, 0.4); --border-input: rgba(22, 91, 51, 0.25);
+            --border-accent: #c41e3a; --highlight-border: #c41e3a;
+            --highlight-shadow: rgba(196, 30, 58, 0.6); --glow-shadow: rgba(255, 215, 0, 0.4);
         }
         html.dark-mode {
-            /* Dark Theme (Rodeo) */
-            --bg-html: #1a0f05;
-            --bg-body-image: url('https://www.transparenttextures.com/patterns/dark-wood.png');
-            --text-primary: #e5e7eb; --text-secondary: #9ca3af;
-            --text-header: #FFD966; --text-accent: #C85A17; --text-highlight: #FFD966;
-            --text-inverted: #FFD966; /* This is correct for the header */
-            --text-link: #C85A17;
-            --bg-sticky: rgba(42, 26, 14, 0.8); --bg-card: linear-gradient(to br, #3a2a1e, #2a1a0e);
-            --bg-card-header: rgba(0, 0, 0, 0.2); /* REVERTED: Back to original dark */
-            --bg-input: #1a0f05;
-            --bg-toggle-hover: rgba(255, 217, 102, 0.1); --border-color: #FFD966;
-            --border-color-light: rgba(255, 217, 102, 0.2); --border-input: rgba(255, 217, 102, 0.2);
-            --border-accent: #C85A17; --highlight-border: #FFD966;
-            --highlight-shadow: rgba(255, 217, 102, 0.5); --glow-shadow: rgba(255, 217, 102, 0.3);
+            /* Dark Theme (Winter Night) */
+            --bg-html: #0a1128;
+            --bg-body-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="10" y="30" font-size="20" opacity="0.15" fill="%23ffffff">❄️</text><text x="60" y="70" font-size="15" opacity="0.12" fill="%2300ff88">🎄</text><text x="30" y="80" font-size="18" opacity="0.13" fill="%23aaddff">⛄</text></svg>');
+            --text-primary: #e8f4f8; --text-secondary: #a8c5ce;
+            --text-header: #ff6b9d; --text-accent: #4ecdc4; --text-highlight: #ffe66d;
+            --text-inverted: #fffacd; /* This is correct for the header */
+            --text-link: #ff6b9d;
+            --bg-sticky: rgba(15, 20, 40, 0.92); --bg-card: linear-gradient(135deg, #1a2332, #0f1419);
+            --bg-card-header: linear-gradient(135deg, #c41e3a 0%, #165b33 100%); /* REVERTED: Back to original dark */
+            --bg-input: #0a1128;
+            --bg-toggle-hover: rgba(78, 205, 196, 0.15); --border-color: #ffe66d;
+            --border-color-light: rgba(255, 230, 109, 0.25); --border-input: rgba(78, 205, 196, 0.3);
+            --border-accent: #ff6b9d; --highlight-border: #ffe66d;
+            --highlight-shadow: rgba(255, 230, 109, 0.6); --glow-shadow: rgba(78, 205, 196, 0.4);
         }
         /* --- END THEME VARIABLES --- */
 
@@ -108,14 +244,44 @@
             background-color: var(--bg-html); /* Fallback */
             color: var(--text-primary);
             transition: background-color 0.3s ease, color 0.3s ease;
+            padding-top: 8px; /* Space for holiday ribbon */
         }
 
 
         /* Re-usable styles */
         .glow-hover:hover {
             /* Refactor #9: Add scale and use variable */
-            transform: translateY(-2px) rotate(1deg) scale(1.01);
-            box-shadow: 0 0 25px var(--glow-shadow);
+            transform: translateY(-2px) rotate(1deg) scale(1.02);
+            box-shadow: 0 0 30px var(--glow-shadow), 0 0 50px var(--highlight-shadow);
+        }
+        
+        .day-card {
+            position: relative;
+        }
+        
+        .day-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                linear-gradient(45deg, var(--border-color-light) 25%, transparent 25%),
+                linear-gradient(-45deg, var(--border-color-light) 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, var(--border-color-light) 75%),
+                linear-gradient(-45deg, transparent 75%, var(--border-color-light) 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            background-repeat: repeat;
+            opacity: 0.03;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        .day-card > * {
+            position: relative;
+            z-index: 1;
         }
        
         .hidden-by-search { display: none !important; }
@@ -124,7 +290,8 @@
         .highlight-upcoming {
             border-width: 3px;
             border-color: var(--highlight-border);
-            box-shadow: 0 0 20px var(--highlight-shadow);
+            box-shadow: 0 0 20px var(--highlight-shadow), 0 0 40px var(--glow-shadow);
+            animation: pulse-glow 3s ease-in-out infinite;
         }
         
         /* Refactor #4: Smooth max-height/opacity transitions */
@@ -165,10 +332,18 @@
         .lesson-spotify-link:hover {
             background-color: rgba(29, 185, 84, 0.06);
             border-color: rgba(29, 185, 84, 0.12);
+            transform: translateY(-2px) scale(1.05);
         }
         .lesson-youtube-link:hover {
             background-color: rgba(255, 0, 0, 0.06);
             border-color: rgba(255, 0, 0, 0.12);
+            transform: translateY(-2px) scale(1.05);
+        }
+        .music-button {
+            transition: all 0.3s ease;
+        }
+        .music-button:hover {
+            transform: translateY(-2px) scale(1.05);
         }
         .lesson-stepsheet-wrapper .lesson-request-qjay-link,
         .lesson-request-qjay-link {
@@ -210,16 +385,26 @@
             * Artist becomes link text and Stepsheet becomes the link URL.
         -->
     <template id="day-card-template">
-        <div class="day-card bg-gradient-to-br border rounded-lg shadow-xl overflow-hidden flex flex-col transform transition-all duration-300 glow-hover"
+        <div class="day-card bg-gradient-to-br border-2 rounded-lg shadow-xl overflow-hidden flex flex-col transform transition-all duration-300 glow-hover relative"
              style="background: var(--bg-card); border-color: var(--border-color-light);">
             
-            <div class='relative bg-[var(--bg-card-header)] text-[var(--text-inverted)] p-5 text-center'>
+            <!-- Holiday Lights on Card -->
+            <div class="holiday-lights">
+                <div class="light"></div>
+                <div class="light"></div>
+                <div class="light"></div>
+                <div class="light"></div>
+                <div class="light"></div>
+            </div>
+            
+            <div class='relative text-[var(--text-inverted)] p-5 text-center' style="background: var(--bg-card-header);">
                 <a href="#" target="_blank" rel="noopener noreferrer" title="Add to Google Calendar"
-                   class="calendar-link absolute top-4 left-4 p-2 bg-[var(--bg-sticky)] hover:bg-[var(--bg-input)] backdrop-blur-sm rounded-full shadow transition-all transform hover:scale-110">
+                   class="calendar-link absolute top-4 left-4 p-2 bg-[var(--bg-sticky)] hover:bg-[var(--bg-input)] backdrop-blur-sm rounded-full shadow transition-all transform hover:scale-110 sparkle">
                     <i data-lucide="calendar-plus" class="w-5 h-5 text-[var(--text-accent)]"></i>
                 </a>
+                <span class="absolute top-4 right-4 text-2xl ornament">🎁</span>
                 <p class='day-of-week font-semibold text-base uppercase tracking-wider opacity-70'></p>
-                <p class='day-of-month text-6xl font-bold'></p>
+                <p class='day-of-month text-6xl font-bold sparkle'></p>
                 <p class='month-year font-medium text-lg opacity-90'></p>
             </div>
             <div class='lessons-container p-6 space-y-6'>
@@ -231,9 +416,11 @@
 
     <template id="lesson-item-template">
         <div class='relative lesson-item'>
-            <span class='lesson-time absolute top-0 right-0 bg-[var(--border-color)] text-[var(--text-on-gold)] text-xs font-bold px-3 py-1 rounded-full shadow-sm'></span>
-            <h4 class='lesson-dance text-2xl font-extrabold text-[var(--text-primary)] mt-2'></h4>
-            <p class='lesson-level text-sm font-bold text-[var(--text-accent)] uppercase tracking-wide'></p>
+            <span class='lesson-time absolute top-0 right-0 bg-[var(--border-color)] text-[var(--text-on-gold)] text-xs font-bold px-3 py-1 rounded-full shadow-sm sparkle'>⏰</span>
+            <h4 class='lesson-dance text-2xl font-extrabold text-[var(--text-primary)] mt-2'>
+                <span class="text-base">🎵</span> <span class="inline-block"></span>
+            </h4>
+            <p class='lesson-level text-sm font-bold text-[var(--text-accent)] uppercase tracking-wide'>⭐</p>
             <div class='mt-2 text-sm text-[var(--text-primary)] space-y-1'>
                 <p class="lesson-song-artist"><strong>Song:</strong> <span class="lesson-song"></span> by <span class="lesson-artist"></span></p>
                 <p class="lesson-instructor-wrapper"><strong>Instructor:</strong> <span class="lesson-instructor"></span></p>
@@ -277,9 +464,11 @@
     <!-- Announcement Item Template -->
     <template id="announcement-item-template">
         <div class='relative announcement-item'>
-            <span class='announcement-time absolute top-0 right-0 bg-[var(--border-color)] text-[var(--text-on-gold)] text-xs font-bold px-3 py-1 rounded-full shadow-sm'></span>
-            <h4 class='announcement-heading text-2xl font-extrabold text-[var(--text-primary)] mt-2'></h4>
-            <p class='announcement-subheading text-sm font-bold text-[var(--text-accent)] uppercase tracking-wide'></p>
+            <span class='announcement-time absolute top-0 right-0 bg-[var(--border-color)] text-[var(--text-on-gold)] text-xs font-bold px-3 py-1 rounded-full shadow-sm sparkle'>⏰</span>
+            <h4 class='announcement-heading text-2xl font-extrabold text-[var(--text-primary)] mt-2'>
+                <span class="text-2xl">📢</span> <span class="inline-block"></span>
+            </h4>
+            <p class='announcement-subheading text-sm font-bold text-[var(--text-accent)] uppercase tracking-wide'>🎉</p>
             <div class='mt-2 text-sm text-[var(--text-primary)] space-y-2'>
                 <p class="announcement-body text-[var(--text-secondary)]"></p>
                 <p class="announcement-link-wrapper"><a href="#" target="_blank" rel="noopener noreferrer" class="announcement-link text-[var(--text-link)] underline font-semibold"></a></p>
@@ -291,11 +480,26 @@
 
 
     <header class="relative text-center mb-8">
-        <h1 class="font-heading text-6xl font-bold text-[var(--text-header)] uppercase tracking-wider drop-shadow-lg">Line Dance Lessons</h1>
-        <p class="text-lg text-[var(--text-secondary)] mt-2">Boots, music, and a whole lot of fun.</p>
+        <!-- Holiday Lights String -->
+        <div class="holiday-lights">
+            <div class="light"></div>
+            <div class="light"></div>
+            <div class="light"></div>
+            <div class="light"></div>
+            <div class="light"></div>
+            <div class="light"></div>
+            <div class="light"></div>
+        </div>
+        
+        <h1 class="font-heading text-6xl font-bold text-[var(--text-header)] uppercase tracking-wider drop-shadow-lg sparkle">
+            <span class="ornament">🎄</span> Line Dance Lessons <span class="ornament">🎄</span>
+        </h1>
+        <p class="text-lg text-[var(--text-secondary)] mt-2">
+            Boots, music, and a whole lot of fun. <span class="text-2xl">❄️✨</span>
+        </p>
         
         <!-- Theme Toggle Button -->
-        <button id="theme-toggle" aria-label="Toggle theme" class="absolute top-0 right-0 p-2 rounded-full text-[var(--text-highlight)] hover:bg-[var(--bg-toggle-hover)] transition-colors">
+        <button id="theme-toggle" aria-label="Toggle theme" class="absolute top-0 right-0 p-2 rounded-full text-[var(--text-highlight)] hover:bg-[var(--bg-toggle-hover)] transition-colors sparkle">
             <i data-lucide="moon" class="w-6 h-6 block"></i>
             <i data-lucide="sun" class="w-6 h-6 hidden"></i>
         </button>
@@ -303,24 +507,48 @@
 
 
     <!-- qjay Link Box (styled like a card similar to LDE-21) -->
-    <div class="mb-6 glass-card p-6 rounded-2xl border-t-4 border-pink-500 text-center">
-        <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">Request with QJay</h3>
+    <div class="mb-6 glass-card p-6 rounded-2xl border-t-4 border-pink-500 text-center relative overflow-hidden">
+        <!-- Holiday Lights on Card -->
+        <div class="holiday-lights">
+            <div class="light"></div>
+            <div class="light"></div>
+            <div class="light"></div>
+            <div class="light"></div>
+            <div class="light"></div>
+            <div class="light"></div>
+            <div class="light"></div>
+        </div>
+        
+        <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">
+            <span class="text-xl">🎅</span> Request with QJay <span class="text-xl">🎁</span>
+        </h3>
         <p class="text-sm text-[var(--text-secondary)] mb-4">See the queue and make requests directly from your phone.</p>
         <a href="https://qjay.app/venue/neon-boots" target="_blank" rel="noopener noreferrer"
-           class="inline-block bg-[var(--text-link)] text-black px-6 py-2 rounded-full font-bold hover:opacity-90 transition">Open QJay</a>
+           class="inline-block bg-[var(--text-link)] text-white px-6 py-2 rounded-full font-bold hover:opacity-90 transition sparkle">
+            Open QJay <span class="text-lg">🔔</span>
+        </a>
     </div>
 
 
     <!-- Search and controls -->
-    <div class="max-w-7xl mx-auto mb-6 p-4 bg-[var(--bg-sticky)] backdrop-blur-sm border border-[var(--border-color-light)] rounded-lg shadow-lg sticky top-4 z-10">
-        <div class="relative">
-            <input type="text" id="search-box" placeholder="Search by dance, artist, instructor, level..."
+    <div class="max-w-7xl mx-auto mb-6 p-4 bg-[var(--bg-sticky)] backdrop-blur-sm border-2 border-[var(--border-color-light)] rounded-lg shadow-lg sticky top-4 z-10 relative overflow-hidden">
+        <!-- Mini Holiday Lights on Search -->
+        <div class="holiday-lights h-5">
+            <div class="light light-sm"></div>
+            <div class="light light-sm"></div>
+            <div class="light light-sm"></div>
+            <div class="light light-sm"></div>
+            <div class="light light-sm"></div>
+        </div>
+        
+        <div class="relative mt-2">
+            <input type="text" id="search-box" placeholder="🔍 Search by dance, artist, instructor, level..."
                    class="w-full pl-10 pr-16 py-3 text-lg bg-[var(--bg-input)] border-2 border-[var(--border-input)] rounded-lg focus:border-[var(--text-accent)] focus:ring-[var(--text-accent)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]">
-            <div class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]">
+            <div class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] sparkle">
                 <i data-lucide="search" class="w-5 h-5"></i>
             </div>
             <button id="clear-search" class="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-accent)] hidden">
-                Clear
+                Clear ❌
             </button>
         </div>
     </div>
@@ -335,17 +563,21 @@
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Loading schedule from Google Sheet...
+                Loading schedule from Google Sheet... <span class="ml-2 text-2xl sparkle">🎄✨</span>
             </p>
 
 
-            <p id="error-message" class="hidden p-6 text-red-200 font-medium bg-red-900/50 border border-red-700 rounded-lg">
+            <p id="error-message" class="hidden p-6 text-red-200 font-medium bg-red-900/50 border-2 border-red-700 rounded-lg">
+                <span class="text-3xl block mb-2">🎅❌🎄</span>
                 Oops! Could not load data. Check the script URL and deployment.
+                <span class="block mt-2 text-sm">Santa's elves are working on it! 🔧</span>
             </p>
 
 
             <p id="no-results-message" class="hidden p-6 text-[var(--text-secondary)] text-center text-lg">
+                <span class="text-4xl block mb-2">🎄🔍❄️</span>
                 No lessons found matching your search.
+                <span class="block mt-2 text-sm">Try a different search term!</span>
             </p>
 
 
@@ -590,15 +822,33 @@
             function _buildMonthElements() {
                 const sortedMonthKeys = Object.keys(state.groupedData).sort().reverse();
                 const today = new Date();
-                today.setHours(0, 0, 0, 0); 
-                const currentMonthKey = today.toISOString().substring(0, 7); 
+                today.setHours(0, 0, 0, 0);
+                
+                // Find the next upcoming lesson date across all months
+                let nextLessonDate = null;
+                for (const monthKey of sortedMonthKeys) {
+                    const monthData = state.groupedData[monthKey];
+                    for (const dayKey of Object.keys(monthData.days)) {
+                        const dayDate = new Date(dayKey + 'T00:00:00');
+                        if (dayDate >= today) {
+                            if (!nextLessonDate || dayDate < nextLessonDate) {
+                                nextLessonDate = dayDate;
+                            }
+                        }
+                    }
+                }
+                
+                // Determine which month should be expanded (the one with the next lesson)
+                const monthKeyToExpand = nextLessonDate 
+                    ? nextLessonDate.toISOString().substring(0, 7) 
+                    : today.toISOString().substring(0, 7); // fallback to current month
                 
                 const fragment = document.createDocumentFragment();
 
 
                 for (const monthKey of sortedMonthKeys) {
                     const monthData = state.groupedData[monthKey];
-                    const isCurrentMonth = monthKey === currentMonthKey;
+                    const isCurrentMonth = monthKey === monthKeyToExpand;
                     const isCollapsed = !isCurrentMonth;
 
 
@@ -607,15 +857,17 @@
                     monthContainer.setAttribute('data-month-key', monthKey);
                     
                     // --- Month Header Button ---
-                    // Refactor #10 & #11: Add 🍂 and chevrons
+                    // Refactor #10 & #11: Add holiday icons and chevrons
                     const monthButton = document.createElement('button');
                     monthButton.className = 'month-header-button flex justify-between items-center w-full text-5xl font-heading font-bold text-[var(--text-accent)] mt-8 mb-4 border-b-2 border-[var(--border-accent)] pb-2';
                     // Refactor #5: Accessibility
                     monthButton.setAttribute('aria-expanded', !isCollapsed);
+                    const holidayIcons = ['🎄', '⛄', '🎅', '🎁', '❄️', '🔔', '🕯️', '🎀'];
+                    const randomIcon = holidayIcons[Math.floor(Math.random() * holidayIcons.length)];
                     monthButton.innerHTML = `
                         <span class="flex items-center gap-4">
-                            <span class="inline-block text-3xl transition-transform hover:rotate-12">🍂</span>
-                            <span>${monthData.monthName}</span>
+                            <span class="inline-block text-3xl transition-transform hover:rotate-12 ornament sparkle">${randomIcon}</span>
+                            <span class="sparkle">${monthData.monthName}</span>
                         </span>
                         <span class='text-2xl font-sans text-[var(--text-highlight)]'>
                             <i data-lucide="chevron-down" class="${isCollapsed ? 'hidden' : 'block'}"></i>
@@ -708,15 +960,16 @@
                 if (isAnnouncement && cache.announcementTemplate) {
                     const announce = cache.announcementTemplate.content.cloneNode(true).firstElementChild;
                     const timeEl = announce.querySelector('.announcement-time');
-                    timeEl.textContent = lesson.time || '';
+                    timeEl.innerHTML = `⏰ ${lesson.time || ''}`;
                     if (!lesson.time || lesson.time.trim().length === 0) timeEl.classList.add('hidden');
                     const headingText = (lesson.danceName || '').replace(/^@{3}\s*/, '').trim();
-                    announce.querySelector('.announcement-heading').textContent = headingText || 'Announcement';
+                    const headingEl = announce.querySelector('.announcement-heading');
+                    headingEl.querySelector('span:last-child').textContent = headingText || 'Announcement';
                     const subEl = announce.querySelector('.announcement-subheading');
                     const bodyEl = announce.querySelector('.announcement-body');
                     const linkWrap = announce.querySelector('.announcement-link-wrapper');
                     if (lesson.level && lesson.level.trim().length > 0) {
-                        subEl.textContent = lesson.level;
+                        subEl.innerHTML = `🎉 ${lesson.level}`;
                     } else {
                         subEl.classList.add('hidden');
                     }
@@ -746,9 +999,14 @@
                 }
                 const item = cache.lessonTemplate.content.cloneNode(true).firstElementChild;
                 
-                item.querySelector('.lesson-time').textContent = lesson.time || 'N/A';
-                item.querySelector('.lesson-dance').textContent = lesson.danceName || 'TBD';
-                item.querySelector('.lesson-level').textContent = lesson.level || 'All Levels';
+                const timeEl = item.querySelector('.lesson-time');
+                timeEl.innerHTML = `⏰ ${lesson.time || 'N/A'}`;
+                
+                const danceEl = item.querySelector('.lesson-dance');
+                danceEl.querySelector('span:last-child').textContent = lesson.danceName || 'TBD';
+                
+                const levelEl = item.querySelector('.lesson-level');
+                levelEl.innerHTML = `⭐ ${lesson.level || 'All Levels'}`;
                 item.querySelector('.lesson-instructor').textContent = lesson.instructor || 'TBD';
 
 
@@ -934,7 +1192,32 @@
 
                     document.querySelectorAll('.month-container').forEach(container => {
                         const monthKey = container.getAttribute('data-month-key');
-                        const isCurrentMonth = monthKey === currentMonthKey;
+                        
+                        // Find next lesson date to determine which month to keep expanded
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        let nextLessonDate = null;
+                        
+                        const allMonthContainers = document.querySelectorAll('.month-container');
+                        allMonthContainers.forEach(mc => {
+                            const mk = mc.getAttribute('data-month-key');
+                            const dayCards = mc.querySelectorAll('.day-card');
+                            dayCards.forEach(card => {
+                                const cardId = card.id.replace('card-', '');
+                                const dayDate = new Date(cardId + 'T00:00:00');
+                                if (dayDate >= today) {
+                                    if (!nextLessonDate || dayDate < nextLessonDate) {
+                                        nextLessonDate = dayDate;
+                                    }
+                                }
+                            });
+                        });
+                        
+                        const monthKeyToExpand = nextLessonDate 
+                            ? nextLessonDate.toISOString().substring(0, 7) 
+                            : today.toISOString().substring(0, 7);
+                        
+                        const isCurrentMonth = monthKey === monthKeyToExpand;
                         
                         // Restore original collapsed state
                         if (!isCurrentMonth) {
@@ -950,11 +1233,29 @@
 
 
 
+        // --- Holiday Snowflakes ---
+        function createSnowflakes() {
+            const snowflakeChars = ['❄️', '❅', '❆', '✨', '⛄', '🎁', '🎀', '🍬', '🌟'];
+            const numFlakes = 35;
+            
+            for (let i = 0; i < numFlakes; i++) {
+                const snowflake = document.createElement('div');
+                snowflake.className = 'snowflake';
+                snowflake.textContent = snowflakeChars[Math.floor(Math.random() * snowflakeChars.length)];
+                snowflake.style.left = Math.random() * 100 + '%';
+                snowflake.style.animationDuration = (Math.random() * 3 + 6) + 's';
+                snowflake.style.animationDelay = Math.random() * 5 + 's';
+                snowflake.style.fontSize = (Math.random() * 1.2 + 0.8) + 'rem';
+                document.body.appendChild(snowflake);
+            }
+        }
+
         // --- Refactor #2: Boot Sequence ---
         document.addEventListener('DOMContentLoaded', () => {
             ThemeManager.init();
             DataHandler.init(); // <-- FIX: Was DataManager
             SearchManager.init();
+            createSnowflakes(); // Add festive snowflakes
         });
 
 
