@@ -84,7 +84,7 @@
         }
         
         /* Holiday ribbon effect */
-        body::before {
+        body.theme-holiday::before {
             content: '';
             position: fixed;
             top: 0;
@@ -107,7 +107,7 @@
             animation: slide-garland 2s linear infinite;
         }
         
-        html.dark-mode body::before {
+        html.dark-mode body.theme-holiday::before {
             background: repeating-linear-gradient(
                 90deg,
                 #ff6b9d 0px,
@@ -122,7 +122,7 @@
         }
         
         /* Corner wreaths */
-        body::after {
+        body.theme-holiday::after {
             content: '🎀';
             position: fixed;
             top: 20px;
@@ -152,11 +152,12 @@
             left: 0;
             right: 0;
             height: 30px;
-            display: flex;
+            display: none;
             justify-content: space-around;
             pointer-events: none;
             z-index: 10;
         }
+        .theme-holiday .holiday-lights { display: flex; }
         
         .light {
             width: 10px;
@@ -234,6 +235,45 @@
             --highlight-shadow: rgba(255, 230, 109, 0.6); --glow-shadow: rgba(78, 205, 196, 0.4);
         }
         /* --- END THEME VARIABLES --- */
+        
+        /* Neon Rodeo Theme */
+        body.theme-neon-rodeo {
+            /* Deep indigo/charcoal background with grain */
+            --bg-html: #111827;
+            --bg-body-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.07'/%3E%3C/svg%3E");
+            
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-header: #22d3ee; /* Electric Cyan */
+            --text-accent: #f472b6; /* Hot Pink */
+            --text-highlight: #fbbf24; /* Amber */
+            --text-link: #22d3ee;
+            --text-inverted: #0f172a;
+            --text-on-gold: #0f172a;
+
+            --bg-sticky: rgba(17, 24, 39, 0.95);
+            --bg-card: rgba(31, 41, 55, 0.7);
+            --bg-card-header: linear-gradient(135deg, #0891b2 0%, #c026d3 100%);
+            --bg-input: #1f2937;
+            --bg-toggle-hover: rgba(34, 211, 238, 0.15);
+
+            --border-color: #fbbf24;
+            --border-color-light: rgba(251, 191, 36, 0.2);
+            --border-input: rgba(34, 211, 238, 0.3);
+            --border-accent: #f472b6;
+
+            --highlight-border: #22d3ee;
+            --highlight-shadow: rgba(34, 211, 238, 0.4);
+            --glow-shadow: rgba(244, 114, 182, 0.2);
+        }
+
+        /* Neon underline for headers */
+        .theme-neon-rodeo h1 { position: relative; display: inline-block; }
+        .theme-neon-rodeo h1::after { content: ''; position: absolute; bottom: -5px; left: 0; right: 0; height: 3px; background: var(--text-header); box-shadow: 0 0 10px var(--text-header), 0 0 20px var(--text-header); border-radius: 100%; animation: pulse-glow 3s infinite; opacity: 0.8; }
+        
+        /* Dust motes animation */
+        @keyframes dust-float { 0% { transform: translateY(100vh) translateX(0); opacity: 0; } 20% { opacity: 0.6; } 80% { opacity: 0.6; } 100% { transform: translateY(-10px) translateX(20px); opacity: 0; } }
+        .theme-neon-rodeo .snowflake { animation-name: dust-float; color: var(--text-highlight); text-shadow: 0 0 5px var(--text-highlight); }
 
 
         /* Base body styling */
@@ -402,7 +442,7 @@
                    class="calendar-link absolute top-4 left-4 p-2 bg-[var(--bg-sticky)] hover:bg-[var(--bg-input)] backdrop-blur-sm rounded-full shadow transition-all transform hover:scale-110 sparkle">
                     <i data-lucide="calendar-plus" class="w-5 h-5 text-[var(--text-accent)]"></i>
                 </a>
-                <span class="absolute top-4 right-4 text-2xl ornament">🎁</span>
+                <span class="absolute top-4 right-4 text-2xl ornament" data-theme-key="cardIcon"></span>
                 <p class='day-of-week font-semibold text-base uppercase tracking-wider opacity-70'></p>
                 <p class='day-of-month text-6xl font-bold sparkle'></p>
                 <p class='month-year font-medium text-lg opacity-90'></p>
@@ -492,10 +532,10 @@
         </div>
         
         <h1 class="font-heading text-6xl font-bold text-[var(--text-header)] uppercase tracking-wider drop-shadow-lg sparkle">
-            <span class="ornament">🎄</span> Line Dance Lessons <span class="ornament">🎄</span>
+            <span class="ornament" data-theme-key="headerIcon"></span> Line Dance Lessons <span class="ornament" data-theme-key="headerIcon"></span>
         </h1>
         <p class="text-lg text-[var(--text-secondary)] mt-2">
-            Boots, music, and a whole lot of fun. <span class="text-2xl">❄️✨</span>
+            Boots, music, and a whole lot of fun. <span class="text-2xl" data-theme-key="headerSubIcon"></span>
         </p>
         
         <!-- Theme Toggle Button -->
@@ -520,12 +560,12 @@
         </div>
         
         <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">
-            <span class="text-xl">🎅</span> Request with QJay <span class="text-xl">🎁</span>
+            <span class="text-xl" data-theme-key="qjayIconLeft"></span> Request with QJay <span class="text-xl" data-theme-key="qjayIconRight"></span>
         </h3>
         <p class="text-sm text-[var(--text-secondary)] mb-4">See the queue and make requests directly from your phone.</p>
         <a href="https://qjay.app/venue/neon-boots" target="_blank" rel="noopener noreferrer"
            class="inline-block bg-[var(--text-link)] text-white px-6 py-2 rounded-full font-bold hover:opacity-90 transition sparkle">
-            Open QJay <span class="text-lg">🔔</span>
+            Open QJay <span class="text-lg" data-theme-key="qjayButtonIcon"></span>
         </a>
     </div>
 
@@ -563,19 +603,19 @@
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Loading schedule from Google Sheet... <span class="ml-2 text-2xl sparkle">🎄✨</span>
+                Loading schedule from Google Sheet... <span class="ml-2 text-2xl sparkle" data-theme-key="loadingIcon"></span>
             </p>
 
 
             <p id="error-message" class="hidden p-6 text-red-200 font-medium bg-red-900/50 border-2 border-red-700 rounded-lg">
-                <span class="text-3xl block mb-2">🎅❌🎄</span>
+                <span class="text-3xl block mb-2" data-theme-key="errorIcon"></span>
                 Oops! Could not load data. Check the script URL and deployment.
-                <span class="block mt-2 text-sm">Santa's elves are working on it! 🔧</span>
+                <span class="block mt-2 text-sm" data-theme-key="errorText"></span>
             </p>
 
 
             <p id="no-results-message" class="hidden p-6 text-[var(--text-secondary)] text-center text-lg">
-                <span class="text-4xl block mb-2">🎄🔍❄️</span>
+                <span class="text-4xl block mb-2" data-theme-key="noResultsIcon"></span>
                 No lessons found matching your search.
                 <span class="block mt-2 text-sm">Try a different search term!</span>
             </p>
@@ -590,6 +630,70 @@
 
     <!-- Refactor #1: Split logic into functional sections -->
     <script>
+        /**
+         * @module ThemeConfig
+         * Centralized configuration for themes.
+         */
+        const ThemeConfig = {
+            active: 'neonRodeo', // Options: 'holiday', 'standard', 'neonRodeo'
+            
+            themes: {
+                holiday: {
+                    cssClass: 'theme-holiday',
+                    text: {
+                        headerIcon: '🎄',
+                        headerSubIcon: '❄️✨',
+                        qjayIconLeft: '🎅',
+                        qjayIconRight: '🎁',
+                        qjayButtonIcon: '🔔',
+                        cardIcon: '🎁',
+                        loadingIcon: '🎄✨',
+                        errorIcon: '🎅❌🎄',
+                        errorText: "Santa's elves are working on it! 🔧",
+                        noResultsIcon: '🎄🔍❄️',
+                        monthIcons: ['🎄', '⛄', '🎅', '🎁', '❄️', '🔔', '🕯️', '🎀'],
+                        snowflakes: ['❄️', '❅', '❆', '✨', '⛄', '🎁', '🎀', '🍬', '🌟']
+                    }
+                },
+                standard: {
+                    cssClass: 'theme-standard',
+                    text: {
+                        headerIcon: '🤠',
+                        headerSubIcon: '✨',
+                        qjayIconLeft: '🎵',
+                        qjayIconRight: '🎸',
+                        qjayButtonIcon: '📱',
+                        cardIcon: '📅',
+                        loadingIcon: '✨',
+                        errorIcon: '❌',
+                        errorText: "Could not load data.",
+                        noResultsIcon: '🔍',
+                        monthIcons: ['🎵', '🎸', '👢', '🤠', '⭐'],
+                        snowflakes: []
+                    }
+                },
+                neonRodeo: {
+                    cssClass: 'theme-neon-rodeo',
+                    text: {
+                        headerIcon: '🤠',
+                        headerSubIcon: '✨',
+                        qjayIconLeft: '🎵',
+                        qjayIconRight: '👢',
+                        qjayButtonIcon: '📱',
+                        cardIcon: '🌵',
+                        loadingIcon: '🤠✨',
+                        errorIcon: '❌🤠',
+                        errorText: "Hold your horses, something went wrong.",
+                        noResultsIcon: '🌵🔍',
+                        monthIcons: ['🤠', '👢', '🌵', '⭐', '🎸', '🎵', '🐎', '🥃'],
+                        snowflakes: ['✨', '⋅', '⋆', '°', '•']
+                    }
+                }
+            },
+            
+            getCurrent() { return this.themes[this.active]; }
+        };
+
         /**
          * @module Utils
          * Shared helper functions
@@ -862,7 +966,7 @@
                     monthButton.className = 'month-header-button flex justify-between items-center w-full text-5xl font-heading font-bold text-[var(--text-accent)] mt-8 mb-4 border-b-2 border-[var(--border-accent)] pb-2';
                     // Refactor #5: Accessibility
                     monthButton.setAttribute('aria-expanded', !isCollapsed);
-                    const holidayIcons = ['🎄', '⛄', '🎅', '🎁', '❄️', '🔔', '🕯️', '🎀'];
+                    const holidayIcons = ThemeConfig.getCurrent().text.monthIcons;
                     const randomIcon = holidayIcons[Math.floor(Math.random() * holidayIcons.length)];
                     monthButton.innerHTML = `
                         <span class="flex items-center gap-4">
@@ -1235,7 +1339,9 @@
 
         // --- Holiday Snowflakes ---
         function createSnowflakes() {
-            const snowflakeChars = ['❄️', '❅', '❆', '✨', '⛄', '🎁', '🎀', '🍬', '🌟'];
+            const snowflakeChars = ThemeConfig.getCurrent().text.snowflakes;
+            if (!snowflakeChars || snowflakeChars.length === 0) return;
+
             const numFlakes = 35;
             
             for (let i = 0; i < numFlakes; i++) {
@@ -1250,8 +1356,22 @@
             }
         }
 
+        // --- Theme Application ---
+        function applyThemeConfig() {
+            const theme = ThemeConfig.getCurrent();
+            document.body.classList.add(theme.cssClass);
+            
+            document.querySelectorAll('[data-theme-key]').forEach(el => {
+                const key = el.getAttribute('data-theme-key');
+                if (theme.text[key]) {
+                    el.textContent = theme.text[key];
+                }
+            });
+        }
+
         // --- Refactor #2: Boot Sequence ---
         document.addEventListener('DOMContentLoaded', () => {
+            applyThemeConfig();
             ThemeManager.init();
             DataHandler.init(); // <-- FIX: Was DataManager
             SearchManager.init();
@@ -1262,6 +1382,3 @@
     </script>
 </body>
 </html>
-
-
-
