@@ -484,17 +484,24 @@
 
 
     <header class="relative text-center mb-8">
-        <h1 class="font-heading text-6xl font-bold text-[var(--text-header)] uppercase tracking-wider drop-shadow-lg sparkle neon-underline inline-flex items-center gap-3">
-            <i data-lucide="sparkles" class="w-7 h-7 text-[var(--text-accent)]"></i> <span>Line Dance Lessons</span> <i data-lucide="music-2" class="w-7 h-7 text-[var(--text-highlight)]"></i>
-        </h1>
+        <div class="inline-flex flex-col items-center gap-1">
+            <h1 class="font-heading text-6xl font-bold text-[var(--text-header)] uppercase tracking-wider drop-shadow-lg sparkle neon-underline inline-flex items-center gap-3">
+                <i data-lucide="sparkles" class="w-7 h-7 text-[var(--text-accent)]"></i> <span>Neon Boots</span> <i data-lucide="music-2" class="w-7 h-7 text-[var(--text-highlight)]"></i>
+            </h1>
+            <h2 class="font-heading text-4xl font-semibold text-[var(--text-secondary)] uppercase tracking-[0.2em] flex items-center gap-2">
+                <i data-lucide="sun" class="w-6 h-6 text-[var(--text-accent)]"></i>
+                <span>Line Dance Lessons</span>
+                <i data-lucide="moon" class="w-6 h-6 text-[var(--text-highlight)]"></i>
+            </h2>
+        </div>
         <p class="text-lg text-[var(--text-secondary)] mt-3">
             Houston's Premier Line Dance Community.
         </p>
         
         <!-- Theme Toggle Button -->
         <button id="theme-toggle" aria-label="Toggle theme" class="absolute top-0 right-0 p-2 rounded-[14px] border-2 border-[var(--border-accent)] bg-[var(--bg-sticky)] shadow-lg text-[var(--text-highlight)] hover:-translate-y-0.5 hover:shadow-xl transition-all focus:outline-none focus:ring-2 focus:ring-[var(--text-link)] sparkle">
-            <i data-lucide="moon-star" class="w-6 h-6 block"></i>
-            <i data-lucide="sunrise" class="w-6 h-6 hidden"></i>
+            <i data-lucide="moon" class="w-6 h-6 block"></i>
+            <i data-lucide="sun" class="w-6 h-6 hidden"></i>
         </button>
     </header>
 
@@ -665,8 +672,8 @@
                 cache.themeToggle = document.getElementById('theme-toggle');
                 if (!cache.themeToggle) return;
                 
-                cache.sunIcon = cache.themeToggle.querySelector('[data-lucide="sunrise"]');
-                cache.moonIcon = cache.themeToggle.querySelector('[data-lucide="moon-star"]');
+                cache.sunIcon = cache.themeToggle.querySelector('[data-lucide="sun"]');
+                cache.moonIcon = cache.themeToggle.querySelector('[data-lucide="moon"]');
 
 
                 // Set initial icon state on load
