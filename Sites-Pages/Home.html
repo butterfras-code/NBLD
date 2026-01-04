@@ -1063,6 +1063,7 @@
 
 
                 cache.searchBox.addEventListener('input', _handleSearch);
+                cache.searchBox.addEventListener('keypress', _handleSearchEnter);
                 cache.clearButton.addEventListener('click', _clearSearch);
                 // Refactor #5: Add keyboard handling
                 document.addEventListener('keydown', _handleKeyDown);
@@ -1072,6 +1073,20 @@
             function _handleKeyDown(e) {
                 if (e.key === 'Escape' && cache.searchBox.value.length > 0) {
                     _clearSearch();
+                }
+            }
+
+
+            function _handleSearchEnter(e) {
+                if (e.key === 'Enter') {
+                    // Blur input to hide keyboard on mobile
+                    cache.searchBox.blur();
+                    
+                    // Scroll to first visible result
+                    const firstVisibleCard = document.querySelector('.day-card:not(.hidden-by-search)');
+                    if (firstVisibleCard) {
+                        firstVisibleCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
                 }
             }
 
